@@ -70,7 +70,7 @@ export const useSimulation = (caseId: string) => {
                 completionTime: null,
                 scheduledArrivalTime: t.startTime! + idealCrossTime + t.platformHaltDuration!,
                 conflictTime: 0,
-                breakdownDuration: t.breakdown || 0,
+                breakdownDuration: t.breakdownDuration || 0,
                 priority: t.priority,
             }
         })));
@@ -90,6 +90,9 @@ export const useSimulation = (caseId: string) => {
     
     const simulationSpeedRef = useRef(simulationSpeed);
     simulationSpeedRef.current = simulationSpeed;
+
+    const isRunningRef = useRef(isRunning);
+    isRunningRef.current = isRunning;
     
     const priorityConflictsResolved = useRef(0);
     const totalPriorityDecisions = useRef(0);
@@ -106,226 +109,234 @@ export const useSimulation = (caseId: string) => {
 
 
     const advanceSimulation = useCallback(() => {
-        const timeDeltaMin = (TIME_STEP_S / 60) * simulationSpeedRef.current;
-        const newSimTime = simulationTime + timeDeltaMin;
-        setSimulationTime(newSimTime);
-        
-        setTrains(currentTrains => {
-            let newTrains: Train[] = JSON.parse(JSON.stringify(currentTrains));
+        setSimulationTime(prevTime => {
+            const timeDeltaMin = TIME_STEP_S / 60; // time progression per tick
+            const newSimTime = prevTime + timeDeltaMin;
 
-            for (let i = 0; i < newTrains.length; i++) {
-                const train = newTrains[i];
+            setTrains(currentTrains => {
+                let newTrains: Train[] = JSON.parse(JSON.stringify(currentTrains));
 
-                if (train.status === 'finished') continue;
+                for (let i = 0; i < newTrains.length; i++) {
+                    const train = newTrains[i];
 
-                // Handle breakdowns
-                if (train.breakdownDuration > 0 && newSimTime >= (train.startTime + 5) && train.status !== 'breakdown') { // simplified trigger
-                    train.status = 'breakdown';
-                    train.speed = 0;
-                }
-                if (train.status === 'breakdown') {
-                    train.breakdownDuration -= timeDeltaMin;
-                    train.totalDelay += timeDeltaMin;
-                    if (train.breakdownDuration <= 0) {
-                        train.status = 'on-time';
-                    } else {
-                        continue;
+                    if (train.status === 'finished') continue;
+
+                    // Handle breakdowns
+                    if (train.breakdownDuration > 0 && newSimTime >= (train.startTime + 5) && train.status !== 'breakdown') { // simplified trigger
+                        train.status = 'breakdown';
+                        train.speed = 0;
                     }
-                }
-                
-                const actualStartTime = train.startTime + (simCase.initialTrains.find(t=>t.id === train.id)?.delay || 0);
+                    if (train.status === 'breakdown') {
+                        train.breakdownDuration -= timeDeltaMin;
+                        train.totalDelay += timeDeltaMin;
+                        if (train.breakdownDuration <= 0) {
+                            train.status = 'on-time';
+                        } else {
+                            continue;
+                        }
+                    }
+                    
+                    const actualStartTime = train.startTime + (simCase.initialTrains.find(t=>t.id === train.id)?.delay || 0);
 
-                if (train.position < 0 && newSimTime >= actualStartTime) {
-                    const entryPoint = simCase.layout.points[simCase.layout.tracks[train.track].points[0]];
-                    train.position = entryPoint.mile;
-                    train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
-                    train.status = 'on-time';
-                }
-                if (train.position < 0) continue;
-
-                if (train.haltTimer > 0) {
-                    train.haltTimer -= timeDeltaMin;
-                    const conflictHalt = train.status === 'in-siding';
-                    if (conflictHalt) train.conflictTime += timeDeltaMin;
-                    train.totalDelay += timeDeltaMin;
-
-                    if (train.haltTimer <= 0) {
+                    if (train.position < 0 && newSimTime >= actualStartTime) {
+                        const entryPoint = simCase.layout.points[simCase.layout.tracks[train.track].points[0]];
+                        train.position = entryPoint.mile;
                         train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
                         train.status = 'on-time';
-                        train.haltTimer = 0;
-                    } else {
-                        train.speed = 0;
-                        continue; 
                     }
-                }
-                
-                // --- Path switching logic ---
-                const currentTrackId = train.track;
-                const currentTrackLayout = simCase.layout.tracks[currentTrackId];
-                if (currentTrackLayout) {
-                    const toPointId = currentTrackLayout.points[1];
-                    const toPoint = simCase.layout.points[toPointId];
+                    if (train.position < 0) continue;
 
-                    if (toPoint && Math.abs(train.position - toPoint.mile) < 0.1 && train.currentPathIndex < train.path.length - 1) {
-                         train.currentPathIndex++;
-                         const nextTrackId = train.path[train.currentPathIndex];
-                         const nextTrackLayout = simCase.layout.tracks[nextTrackId];
-                         if (nextTrackLayout) {
-                             train.track = nextTrackId;
-                             const fromPointNextTrack = simCase.layout.points[nextTrackLayout.points[0]];
-                             train.position = fromPointNextTrack.mile;
-                         }
-                    }
-                }
-                
-                const currentPoint = Object.values(simCase.layout.points).find(p => p.isPlatform && Math.abs(train.position - p.mile) < 0.2);
-                if (currentPoint && !train.hasHaltedAtPlatform) {
-                    train.status = 'at-platform';
-                    train.haltTimer = train.platformHaltDuration;
-                    train.hasHaltedAtPlatform = true;
-                    train.speed = 0;
-                    continue;
-                }
+                    if (train.haltTimer > 0) {
+                        train.haltTimer -= timeDeltaMin;
+                        const conflictHalt = train.status === 'in-siding';
+                        if (conflictHalt) train.conflictTime += timeDeltaMin;
+                        train.totalDelay += timeDeltaMin;
 
-                let newSpeed = train.baseSpeed * (simCase.config.weatherFactor || 1);
-                let newStatus: Train['status'] = train.status === 'at-platform' || train.status === 'in-siding' ? train.status : 'on-time';
-                
-                // --- Headway and Conflict Logic ---
-                let leadTrainDistance = Infinity;
-                let conflictDetected = false;
-
-                for (let j = 0; j < newTrains.length; j++) {
-                    if (i === j || newTrains[j].status === 'finished' || newTrains[j].status === 'breakdown') continue;
-                    
-                    const otherTrain = newTrains[j];
-                    if (otherTrain.track === train.track && otherTrain.position > train.position) {
-                        leadTrainDistance = Math.min(leadTrainDistance, otherTrain.position - train.position);
-                    }
-                     // Check for breakdown blockage
-                    if (newTrains[j].status === 'breakdown' && newTrains[j].track === train.track && newTrains[j].position > train.position) {
-                        leadTrainDistance = Math.min(leadTrainDistance, newTrains[j].position - train.position);
-                    }
-                }
-                
-                const headwayDistance = (HEADWAY_MIN / 60) * train.baseSpeed;
-                const stoppingDistance = headwayDistance * 0.5;
-                const slowingDistance = headwayDistance * 1.5;
-
-                if (leadTrainDistance < stoppingDistance) {
-                    newSpeed = 0;
-                    newStatus = 'stopped';
-                    conflictDetected = true;
-                } else if (leadTrainDistance < slowingDistance) {
-                    newSpeed = train.baseSpeed * (leadTrainDistance / slowingDistance);
-                    newStatus = 'slowing';
-                    conflictDetected = true;
-                }
-                
-                // Siding logic for low priority trains
-                const sidingPoint = Object.values(simCase.layout.points).find(p => p.label === 'S');
-                if (sidingPoint && train.priority === 'low') {
-                    const highPriorityConflict = newTrains.find(t => 
-                        t.priority === 'high' && 
-                        t.track === train.track &&
-                        t.position > train.position &&
-                        (t.position - train.position) < slowingDistance * 2
-                    );
-
-                    if (highPriorityConflict && Math.abs(train.position - sidingPoint.mile) < 1 && train.status !== 'in-siding') {
-                        totalPriorityDecisions.current++;
-                        if(highPriorityConflict.priority !== train.priority) {
-                           priorityConflictsResolved.current++;
+                        if (train.haltTimer <= 0) {
+                            train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
+                            train.status = 'on-time';
+                            train.haltTimer = 0;
+                        } else {
+                            train.speed = 0;
+                            continue; 
                         }
-                        const extraHalt = simCase.initialTrains.find(t=>t.id === train.id)?.sidingHaltDuration || SIDING_HALT_DURATION_MIN;
-                        train.status = 'in-siding';
-                        train.haltTimer = extraHalt;
+                    }
+                    
+                    // --- Path switching logic ---
+                    const currentTrackId = train.track;
+                    const currentTrackLayout = simCase.layout.tracks[currentTrackId];
+                    if (currentTrackLayout) {
+                        const toPointId = currentTrackLayout.points[1];
+                        const toPoint = simCase.layout.points[toPointId];
+
+                        if (toPoint && Math.abs(train.position - toPoint.mile) < 0.1 && train.currentPathIndex < train.path.length - 1) {
+                             train.currentPathIndex++;
+                             const nextTrackId = train.path[train.currentPathIndex];
+                             const nextTrackLayout = simCase.layout.tracks[nextTrackId];
+                             if (nextTrackLayout) {
+                                 train.track = nextTrackId;
+                                 const fromPointNextTrack = simCase.layout.points[nextTrackLayout.points[0]];
+                                 train.position = fromPointNextTrack.mile;
+                             }
+                        }
+                    }
+                    
+                    const currentPoint = Object.values(simCase.layout.points).find(p => p.isPlatform && Math.abs(train.position - p.mile) < 0.2);
+                    if (currentPoint && !train.hasHaltedAtPlatform) {
+                        train.status = 'at-platform';
+                        train.haltTimer = train.platformHaltDuration;
+                        train.hasHaltedAtPlatform = true;
+                        train.speed = 0;
+                        continue;
+                    }
+
+                    let newSpeed = train.baseSpeed * (simCase.config.weatherFactor || 1);
+                    let newStatus: Train['status'] = train.status === 'at-platform' || train.status === 'in-siding' ? train.status : 'on-time';
+                    
+                    // --- Headway and Conflict Logic ---
+                    let leadTrainDistance = Infinity;
+                    let conflictDetected = false;
+
+                    for (let j = 0; j < newTrains.length; j++) {
+                        if (i === j || newTrains[j].status === 'finished') continue;
+                        
+                        const otherTrain = newTrains[j];
+                        
+                        // Check for headway on the same track
+                        if (otherTrain.track === train.track && otherTrain.position > train.position) {
+                            leadTrainDistance = Math.min(leadTrainDistance, otherTrain.position - train.position);
+                        }
+                        
+                        // Check for breakdown blockage
+                        if (newTrains[j].status === 'breakdown' && newTrains[j].track === train.track && newTrains[j].position > train.position) {
+                            leadTrainDistance = Math.min(leadTrainDistance, newTrains[j].position - train.position);
+                        }
+                    }
+                    
+                    const headwayDistance = (HEADWAY_MIN / 60) * train.baseSpeed;
+                    const stoppingDistance = headwayDistance * 0.5;
+                    const slowingDistance = headwayDistance * 1.5;
+
+                    if (leadTrainDistance < stoppingDistance) {
                         newSpeed = 0;
-                        train.position = sidingPoint.mile;
+                        newStatus = 'stopped';
+                        conflictDetected = true;
+                    } else if (leadTrainDistance < slowingDistance) {
+                        newSpeed = Math.max(0, train.baseSpeed * (leadTrainDistance / slowingDistance));
+                        newStatus = 'slowing';
                         conflictDetected = true;
                     }
+                    
+                    // Siding logic for low priority trains
+                    const sidingPoints = Object.values(simCase.layout.points).filter(p => p.label?.includes('Siding'));
+                    if (sidingPoints.length > 0 && train.priority === 'low') {
+                        const highPriorityConflict = newTrains.find(t => 
+                            t.priority === 'high' && 
+                            t.track === train.track &&
+                            t.position > train.position &&
+                            (t.position - train.position) < slowingDistance * 2
+                        );
+
+                        const sidingPoint = sidingPoints[0]; // Simplification for now
+                        if (highPriorityConflict && Math.abs(train.position - sidingPoint.mile) < 1 && train.status !== 'in-siding') {
+                            totalPriorityDecisions.current++;
+                            if(highPriorityConflict.priority !== train.priority) {
+                               priorityConflictsResolved.current++;
+                            }
+                            const extraHalt = simCase.initialTrains.find(t=>t.id === train.id)?.sidingHaltDuration || SIDING_HALT_DURATION_MIN;
+                            train.status = 'in-siding';
+                            train.haltTimer = extraHalt;
+                            newSpeed = 0;
+                            train.position = sidingPoint.mile;
+                            conflictDetected = true;
+                        }
+                    }
+
+
+                    if (conflictDetected) {
+                        train.conflictTime += timeDeltaMin;
+                    }
+                    if (newStatus === 'stopped' || newStatus === 'slowing') {
+                        train.totalDelay += timeDeltaMin;
+                    }
+
+                    train.speed = newSpeed;
+                    if(!['at-platform', 'in-siding', 'breakdown'].includes(train.status)) {
+                        train.status = newStatus;
+                    }
+                    
+                    const distanceMoved = train.speed * (timeDeltaMin / 60);
+                    train.position += distanceMoved;
+
+                    const exitPoints = Object.values(simCase.layout.points).filter(p => p.label?.startsWith('E_') || p.label?.startsWith('SL_'));
+                    if (exitPoints.some(p => Math.abs(p.mile - train.position) < 0.5 && p.mile >= SECTION_LENGTH_MI - 0.5 )) {
+                        train.status = 'finished';
+                        train.speed = 0;
+                        train.completionTime = newSimTime;
+                    }
+
+
+                    newTrains[i] = train;
                 }
 
+                // --- Calculate metrics ---
+                const finishedTrains = newTrains.filter(t => t.status === 'finished');
+                const activeTrains = newTrains.filter(t => t.position > -1);
+                if (activeTrains.length > 0) {
+                    const totalDelay = activeTrains.reduce((acc, t) => acc + t.totalDelay, 0);
+                    const avgDelay = totalDelay / activeTrains.length;
+                    
+                    const timeWindowHours = Math.max(newSimTime - newTrains[0].startTime, 1) / 60;
+                    const throughput = finishedTrains.length / timeWindowHours;
 
-                if (conflictDetected) {
-                    train.conflictTime += timeDeltaMin;
+                    const idealTime = activeTrains.reduce((acc, t) => acc + (SECTION_LENGTH_MI / t.baseSpeed) * 60 + t.platformHaltDuration, 0);
+                    const actualTime = activeTrains.reduce((acc, t) => t.completionTime ? acc + (t.completionTime - t.startTime) : acc + (newSimTime - t.startTime), 0);
+                    const efficiency = (idealTime > 0 && actualTime > 0) ? Math.min(idealTime / actualTime, 1) : 0;
+                    
+                    const punctualTrains = finishedTrains.filter(t => t.completionTime! <= t.scheduledArrivalTime + 5).length;
+                    const punctualityRate = finishedTrains.length > 0 ? (punctualTrains / finishedTrains.length) * 100 : 100;
+                    
+                    const totalTrackTime = newSimTime * Object.keys(simCase.layout.tracks).length * SECTION_LENGTH_MI;
+                    const occupiedTrackTime = activeTrains.reduce((acc, t) => acc + (t.speed > 0 ? timeDeltaMin * SECTION_LENGTH_MI : 0), 0);
+                    const trackUtilization = totalTrackTime > 0 ? (occupiedTrackTime / totalTrackTime) * 100 * 50 : 0; // *50 fudge factor
+
+                    const totalPlatformTime = newSimTime * Object.values(simCase.layout.points).filter(p=>p.isPlatform).length;
+                    const occupiedPlatformTime = activeTrains.reduce((acc, t) => acc + (t.status === 'at-platform' ? timeDeltaMin : 0), 0);
+                    const platformOccupancy = totalPlatformTime > 0 ? (occupiedPlatformTime / totalPlatformTime) * 100 : 0;
+
+                    const conflictResolutionTime = activeTrains.reduce((acc, t) => acc + t.conflictTime, 0);
+                    const priorityAdherence = totalPriorityDecisions.current > 0 ? (priorityConflictsResolved.current / totalPriorityDecisions.current) * 100 : 100;
+
+                    setMetrics({
+                        throughput: parseFloat(throughput.toFixed(1)),
+                        avgDelay: parseFloat(avgDelay.toFixed(1)),
+                        efficiency: parseFloat(efficiency.toFixed(2)) * 100,
+                        totalDelay: parseFloat(totalDelay.toFixed(1)),
+                        punctualityRate: parseFloat(punctualityRate.toFixed(0)),
+                        trackUtilization: parseFloat(trackUtilization.toFixed(0)),
+                        platformOccupancy: parseFloat(platformOccupancy.toFixed(0)),
+                        conflictResolutionTime: parseFloat(conflictResolutionTime.toFixed(1)),
+                        safetyComplianceRate: 99, // Mock value
+                        priorityAdherence: parseFloat(priorityAdherence.toFixed(0)),
+                    });
                 }
-                if (newStatus === 'stopped' || newStatus === 'slowing') {
-                    train.totalDelay += timeDeltaMin;
-                }
 
-                train.speed = newSpeed;
-                if(newStatus !== train.status && !['at-platform', 'in-siding'].includes(train.status)) {
-                    train.status = newStatus;
-                }
-                
-                const distanceMoved = train.speed * (TIME_STEP_S / 3600);
-                train.position += distanceMoved * simulationSpeedRef.current;
-
-                const exitPoints = Object.values(simCase.layout.points).filter(p => p.label?.startsWith('S') && p.mile > 0);
-                if (exitPoints.some(p => Math.abs(p.mile - train.position) < 0.5 && p.mile > SECTION_LENGTH_MI -1 )) {
-                    train.status = 'finished';
-                    train.speed = 0;
-                    train.completionTime = newSimTime;
-                }
-
-
-                newTrains[i] = train;
-            }
-
-            return newTrains;
+                return newTrains;
+            });
+            return newSimTime;
         });
-        
-        // --- Calculate metrics ---
-        const finishedTrains = trains.filter(t => t.status === 'finished');
-        const activeTrains = trains.filter(t => t.position > -1);
-        if (activeTrains.length === 0) return;
-        
-        const totalDelay = activeTrains.reduce((acc, t) => acc + t.totalDelay, 0);
-        const avgDelay = totalDelay / activeTrains.length;
-        
-        const timeWindowHours = Math.max(newSimTime - trains[0].startTime, 1) / 60;
-        const throughput = finishedTrains.length / timeWindowHours;
-
-        const idealTime = activeTrains.reduce((acc, t) => acc + (SECTION_LENGTH_MI / t.baseSpeed) * 60 + t.platformHaltDuration, 0);
-        const actualTime = activeTrains.reduce((acc, t) => t.completionTime ? acc + (t.completionTime - t.startTime) : acc + (newSimTime - t.startTime), 0);
-        const efficiency = (idealTime > 0 && actualTime > 0) ? Math.min(idealTime / actualTime, 1) : 0;
-        
-        const punctualTrains = finishedTrains.filter(t => t.completionTime! <= t.scheduledArrivalTime + 5).length;
-        const punctualityRate = finishedTrains.length > 0 ? (punctualTrains / finishedTrains.length) * 100 : 100;
-        
-        const totalTrackTime = newSimTime * Object.keys(simCase.layout.tracks).length * SECTION_LENGTH_MI;
-        const occupiedTrackTime = activeTrains.reduce((acc, t) => acc + (t.speed > 0 ? timeDeltaMin * SECTION_LENGTH_MI : 0), 0);
-        const trackUtilization = totalTrackTime > 0 ? (occupiedTrackTime / totalTrackTime) * 100 * 50 : 0; // *50 fudge factor
-
-        const totalPlatformTime = newSimTime * Object.values(simCase.layout.points).filter(p=>p.isPlatform).length;
-        const occupiedPlatformTime = activeTrains.reduce((acc, t) => acc + (t.status === 'at-platform' ? timeDeltaMin : 0), 0);
-        const platformOccupancy = totalPlatformTime > 0 ? (occupiedPlatformTime / totalPlatformTime) * 100 : 0;
-
-        const conflictResolutionTime = activeTrains.reduce((acc, t) => acc + t.conflictTime, 0);
-        const priorityAdherence = totalPriorityDecisions.current > 0 ? (priorityConflictsResolved.current / totalPriorityDecisions.current) * 100 : 100;
-
-        setMetrics({
-            throughput: parseFloat(throughput.toFixed(1)),
-            avgDelay: parseFloat(avgDelay.toFixed(1)),
-            efficiency: parseFloat(efficiency.toFixed(2)) * 100,
-            totalDelay: parseFloat(totalDelay.toFixed(1)),
-            punctualityRate: parseFloat(punctualityRate.toFixed(0)),
-            trackUtilization: parseFloat(trackUtilization.toFixed(0)),
-            platformOccupancy: parseFloat(platformOccupancy.toFixed(0)),
-            conflictResolutionTime: parseFloat(conflictResolutionTime.toFixed(1)),
-            safetyComplianceRate: 99, // Mock value
-            priorityAdherence: parseFloat(priorityAdherence.toFixed(0)),
-        });
-
-    }, [caseId, simCase, simulationTime, trains]);
+    }, [caseId, simCase]);
 
     useEffect(() => {
         if (!isRunning) return;
 
-        const interval = setInterval(advanceSimulation, 100);
+        // The interval delay is now dependent on the simulation speed
+        const intervalDelay = 100 / simulationSpeedRef.current;
+        const interval = setInterval(advanceSimulation, intervalDelay);
 
         return () => clearInterval(interval);
     }, [isRunning, advanceSimulation]);
+
 
     const reset = useCallback(() => {
         setIsRunning(false);
@@ -334,13 +345,41 @@ export const useSimulation = (caseId: string) => {
         setMetrics(initialMetrics);
         priorityConflictsResolved.current = 0;
         totalPriorityDecisions.current = 0;
-    }, [initializeTrains, initialMetrics]);
+        setTimeout(() => setIsRunning(true), 100);
+    }, [initializeTrains]);
 
     const step = useCallback(() => {
         if (!isRunning) {
             advanceSimulation();
         }
     }, [isRunning, advanceSimulation]);
+    
+    // This effect handles the simulation loop itself
+    useEffect(() => {
+        let lastTime = performance.now();
+        let animationFrameId: number;
 
-    return { trains, isRunning, setIsRunning, reset, step, simulationSpeed, setSimulationSpeed, simulationTime, metrics };
+        const gameLoop = (currentTime: number) => {
+            const deltaTime = (currentTime - lastTime);
+            lastTime = currentTime;
+            
+            if (isRunningRef.current) {
+                // The simulation logic is now called inside requestAnimationFrame
+                // but the time progression is controlled by simulationSpeed state
+            }
+            // advanceSimulation is now called via setInterval, so we don't call it here
+            animationFrameId = requestAnimationFrame(gameLoop);
+        };
+        
+        // animationFrameId = requestAnimationFrame(gameLoop);
+
+        // return () => cancelAnimationFrame(animationFrameId);
+    }, []);
+
+    // New function to handle speed changes from the slider
+    const handleSpeedChange = (speed: number) => {
+        setSimulationSpeed(speed);
+    };
+
+    return { trains, isRunning, setIsRunning, reset, step, simulationSpeed, setSimulationSpeed: handleSpeedChange, simulationTime, metrics };
 };

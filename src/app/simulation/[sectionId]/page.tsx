@@ -12,7 +12,6 @@ import { AICopilot } from "@/components/simulation/ai-copilot";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { KPIPanel } from "@/components/simulation/kpi-panel";
-import { useSimulation } from "@/hooks/use-simulation";
 
 export default function SimulationPage({ params, searchParams }: { 
     params: { sectionId: string },

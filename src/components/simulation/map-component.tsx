@@ -12,7 +12,9 @@ const statusColors: { [key: string]: string } = {
     'delayed': '#f97316', // orange-500
     'conflict': '#dc2626', // red-600,
     'in-siding': '#9333ea', // purple-600
-    'at-platform': '#2563eb' // blue-600
+    'at-platform': '#2563eb', // blue-600
+    'breakdown': '#be123c', // rose-700
+    'finished': '#4b5563', // gray-600
 }
 
 export function MapComponent({ section, caseId }: { section: Section, caseId: string }) {
@@ -36,27 +38,30 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
     const toPoint = currentLayout.points[trackLayout.points[1]];
     if (!fromPoint || !toPoint) return null;
 
-    const controlPoint1 = trackLayout.controlPoints?.[0] ? currentLayout.points[trackLayout.controlPoints[0]] : null;
-    const controlPoint2 = trackLayout.controlPoints?.[1] ? currentLayout.points[trackLayout.controlPoints[1]] : null;
-
-    const totalLength = 20; // This is a simplification; for complex routes, this should be track-specific
-    
     const startMile = fromPoint.mile;
     const endMile = toPoint.mile;
     const trackLength = Math.abs(endMile - startMile);
 
     if (trackLength === 0) return { x: fromPoint.x, y: fromPoint.y };
+    
+    // Ensure t is between 0 and 1
+    const t = Math.max(0, Math.min(1, (mile - startMile) / trackLength));
 
-    const t = (mile - startMile) / trackLength;
+    let cp1 = trackLayout.controlPoints?.[0];
+    let cp2 = trackLayout.controlPoints?.[1];
+
+    // Resolve string references to actual points
+    if (typeof cp1 === 'string') cp1 = currentLayout.points[cp1];
+    if (typeof cp2 === 'string') cp2 = currentLayout.points[cp2];
 
 
-    if (controlPoint1 && controlPoint2) { // Cubic Bezier
-      const x = (1-t)**3 * fromPoint.x + 3*(1-t)**2 * t * controlPoint1.x + 3*(1-t) * t**2 * controlPoint2.x + t**3 * toPoint.x;
-      const y = (1-t)**3 * fromPoint.y + 3*(1-t)**2 * t * controlPoint1.y + 3*(1-t) * t**2 * controlPoint2.y + t**3 * toPoint.y;
+    if (cp1 && cp2) { // Cubic Bezier
+      const x = (1-t)**3 * fromPoint.x + 3*(1-t)**2 * t * cp1.x + 3*(1-t) * t**2 * cp2.x + t**3 * toPoint.x;
+      const y = (1-t)**3 * fromPoint.y + 3*(1-t)**2 * t * cp1.y + 3*(1-t) * t**2 * cp2.y + t**3 * toPoint.y;
       return { x, y };
-    } else if (controlPoint1) { // Quadratic Bezier
-        const x = (1-t)**2 * fromPoint.x + 2*(1-t)*t * controlPoint1.x + t**2 * toPoint.x;
-        const y = (1-t)**2 * fromPoint.y + 2*(1-t)*t * controlPoint1.y + t**2 * toPoint.y;
+    } else if (cp1) { // Quadratic Bezier
+        const x = (1-t)**2 * fromPoint.x + 2*(1-t)*t * cp1.x + t**2 * toPoint.x;
+        const y = (1-t)**2 * fromPoint.y + 2*(1-t)*t * cp1.y + t**2 * toPoint.y;
         return { x, y };
     } else { // Linear
       return {
@@ -158,9 +163,14 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
         Object.values(layout.tracks).forEach(trackLayout => {
             const from = layout.points[trackLayout.points[0]];
             const to = layout.points[trackLayout.points[1]];
-            const cp1 = trackLayout.controlPoints?.[0] ? layout.points[trackLayout.controlPoints[0]] : null;
-            const cp2 = trackLayout.controlPoints?.[1] ? layout.points[trackLayout.controlPoints[1]] : null;
+            if (!from || !to) return;
             
+            let cp1 = trackLayout.controlPoints?.[0];
+            let cp2 = trackLayout.controlPoints?.[1];
+
+            if (typeof cp1 === 'string') cp1 = layout.points[cp1];
+            if (typeof cp2 === 'string') cp2 = layout.points[cp2];
+
             ctx.beginPath();
             ctx.moveTo(from.x, from.y);
             if (cp1 && cp2) {
@@ -204,7 +214,7 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
 
             // Train Body
             const staticData = staticTrainData[train.id];
-            const trainColor = staticData ? (staticData.type === 'passenger' ? '#3b82f6' : '#6b7280') : '#fff';
+            const trainColor = staticData ? (staticData.type === 'passenger' ? '#3b82f6' : staticData.type === 'express' ? '#10b981' : '#6b7280') : '#fff';
             
             ctx.fillStyle = trainColor;
             ctx.beginPath();
@@ -223,17 +233,15 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
             ctx.font = `bold ${10 / view.zoom}px sans-serif`;
             ctx.textAlign = 'left';
             
-            if (staticData) {
-                const textLines = [
-                    `${staticData.trainNo}`,
-                    `${train.speed.toFixed(0)} mph`,
-                    `${train.status}`,
-                ];
-                
-                textLines.forEach((line, index) => {
-                    ctx.fillText(line, point.x + 18 / view.zoom, point.y - (8 / view.zoom) + (index * 12 / view.zoom));
-                });
-            }
+            const textLines = [
+                `${train.id}`,
+                `${train.speed.toFixed(0)} mph`,
+                `${train.status}`,
+            ];
+            
+            textLines.forEach((line, index) => {
+                ctx.fillText(line, point.x + 18 / view.zoom, point.y - (8 / view.zoom) + (index * 12 / view.zoom));
+            });
         });
         
         ctx.restore();
@@ -256,5 +264,3 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
 
   return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-card rounded-lg" />;
 }
-
-    
