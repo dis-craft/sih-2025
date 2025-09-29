@@ -3,7 +3,7 @@ import { useRef, useEffect, useState } from 'react';
 import type { Section } from '@/lib/schema';
 import { useSimulation } from '@/hooks/use-simulation';
 import { simulationCases } from '@/lib/simulation-cases';
-import { allTrains } from '@/lib/data';
+import { allTrains as staticTrainData } from '@/lib/data';
 
 const trackColor = '#4b5563'; // gray-600
 const stationColor = '#e5e7eb'; // gray-200
@@ -14,17 +14,19 @@ const trainColors: { [key: string]: string } = {
   emergency: '#ef4444', // red-500
 };
 
-const statusColors: { [key in ReturnType<typeof useSimulation>['trains'][0]['status']]: string } = {
+const statusColors: { [key: string]: string } = {
     'on-time': '#22c55e', // green-500
     'slowing': '#facc15', // yellow-400
     'stopped': '#ef4444', // red-500
     'delayed': '#f97316', // orange-500
-    'conflict': '#dc2626', // red-600
+    'conflict': '#dc2626', // red-600,
+    'in-siding': '#9333ea', // purple-600
+    'at-platform': '#2563eb' // blue-600
 }
 
 export function MapComponent({ section, caseId }: { section: Section, caseId: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { trains } = useSimulation(caseId);
+  const { trains, simulationTime } = useSimulation(caseId);
   const [view, setView] = useState({ x: 0, y: 0, zoom: 0.8 });
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 });
@@ -35,13 +37,18 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
   }
   const { layout } = simCase;
 
-  const getPointOnPath = (pathName: string, t: number) => {
-      const path = layout.paths[pathName as keyof typeof layout.paths];
-      if (!path) return { x: 0, y: 0 };
-      const from = layout.points[path[0] as keyof typeof layout.points];
-      const to = layout.points[path[1] as keyof typeof layout.points];
-      if (!from || !to) return {x: 0, y: 0};
-      return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+  const getPointForPosition = (trackId: string, mile: number) => {
+    const trackLayout = layout.tracks[trackId];
+    if (!trackLayout) return null;
+    const fromPoint = layout.points[trackLayout.points[0]];
+    const toPoint = layout.points[trackLayout.points[1]];
+    if (!fromPoint || !toPoint) return null;
+
+    const percentage = mile / 20; // 20 miles total length
+    return {
+        x: fromPoint.x + (toPoint.x - fromPoint.x) * percentage,
+        y: fromPoint.y + (toPoint.y - fromPoint.y) * percentage
+    };
   };
 
   useEffect(() => {
@@ -129,29 +136,27 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
         ctx.translate(view.x, view.y);
         ctx.scale(view.zoom, view.zoom);
 
-        // --- Draw Tracks ---
-        ctx.strokeStyle = trackColor;
+        // --- Draw Tracks and Blocks ---
         ctx.lineWidth = 3 / view.zoom;
-        Object.values(layout.paths).forEach(path => {
-            const from = layout.points[path[0] as keyof typeof layout.points];
-            const to = layout.points[path[1] as keyof typeof layout.points];
+        Object.values(layout.tracks).forEach(trackLayout => {
+            const from = layout.points[trackLayout.points[0]];
+            const to = layout.points[trackLayout.points[1]];
+            ctx.strokeStyle = layout.config.trackColor || trackColor;
             ctx.beginPath();
             ctx.moveTo(from.x, from.y);
             ctx.lineTo(to.x, to.y);
             ctx.stroke();
         });
 
-        // --- Draw Junction/Station Points ---
-        ctx.fillStyle = stationColor;
-        ctx.strokeStyle = '#9ca3af'; // gray-400
-        ctx.lineWidth = 2 / view.zoom;
-        Object.entries(layout.points).forEach(([key, p]) => {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 8 / view.zoom, 0, 2 * Math.PI);
-            ctx.fill();
-            ctx.stroke();
-            
-            if (p.label) {
+        // --- Draw Blocks and Stations ---
+        ctx.lineWidth = 1 / view.zoom;
+        Object.values(layout.points).forEach(p => {
+             if (p.label) {
+                ctx.fillStyle = stationColor;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 8 / view.zoom, 0, 2 * Math.PI);
+                ctx.fill();
+                
                 ctx.fillStyle = '#000';
                 ctx.font = `bold ${10 / view.zoom}px sans-serif`;
                 ctx.textAlign = 'center';
@@ -160,10 +165,11 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
             }
         });
 
+
         // --- Draw Trains ---
         trains.forEach(train => {
-            const point = getPointOnPath(train.path, train.progress);
-            if(point.x === 0 && point.y === 0) return;
+            const point = getPointForPosition(train.track, train.position);
+            if(!point) return;
 
             // Train Body
             ctx.fillStyle = trainColors[train.type] || '#fff';
@@ -173,16 +179,17 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 1.5 / view.zoom;
             ctx.stroke();
-
+            
             // Micro-details text
             ctx.fillStyle = '#fff';
             ctx.font = `${12 / view.zoom}px sans-serif`;
             ctx.textAlign = 'left';
-            const speedKmph = (train.speed / train.maxSpeed * (allTrains[train.id]?.maxSpeed_kmph || 90)).toFixed(0);
-            
+            const staticData = staticTrainData[train.id];
+
             const textLines = [
-                `ID: ${train.id}`,
-                `Spd: ${speedKmph} km/h`,
+                `ID: ${staticData?.trainNo || train.id}`,
+                `Spd: ${train.speed.toFixed(0)} mph`,
+                `Pos: ${train.position.toFixed(2)} mi`,
                 `Status: ${train.status}`,
             ];
             
@@ -198,6 +205,13 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
         });
         
         ctx.restore();
+
+        // --- Draw Sim Time ---
+        ctx.fillStyle = 'white';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(`Sim Time: 7:${String(Math.floor(simulationTime)).padStart(2,'0')}:${String(Math.floor((simulationTime % 1) * 60)).padStart(2,'0')} PM`, canvas.width/dpr - 10, 20);
+
         animationFrameId = window.requestAnimationFrame(render);
     }
     render();
@@ -206,7 +220,7 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
         window.cancelAnimationFrame(animationFrameId);
     };
 
-  }, [trains, view, layout]);
+  }, [trains, simulationTime, view, layout, caseId]);
 
   return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-gray-800 rounded-lg" />;
 }

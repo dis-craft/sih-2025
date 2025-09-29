@@ -23,11 +23,13 @@ export function CaseSelector({ sectionId }: { sectionId: string }) {
         router.push(`${pathname}?${params.toString()}`);
     };
 
+    const cases = Object.values(simulationCases).filter(c => c.sectionId === sectionId);
+
     return (
         <SidebarGroup>
             <SidebarGroupLabel>Simulation Cases</SidebarGroupLabel>
             <SidebarMenu>
-                {Object.values(simulationCases).map(c => (
+                {cases.map(c => (
                     <SidebarMenuItem key={c.id}>
                         <SidebarMenuButton onClick={() => handleCaseChange(c.id)} isActive={currentCase === c.id} tooltip={c.name}>
                             <BookCopy />
