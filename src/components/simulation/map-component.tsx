@@ -1,9 +1,11 @@
 'use client';
 import { useRef, useEffect, useState } from 'react';
-import { Section } from '@/lib/schema';
-import { useSimulation } from '@/hooks/use-simulation';
+import type { Section } from '@/lib/schema';
+import { useSimulation, Train } from '@/hooks/use-simulation';
+import { stations as allStations } from '@/lib/data';
 
-const trackColor = '#e2e8f0'; // slate-200
+const trackColor = '#4b5563'; // gray-600
+const stationColor = '#e5e7eb'; // gray-200
 const trainColors: { [key: string]: string } = {
   express: '#f97316', // orange-500
   passenger: '#3b82f6', // blue-500
@@ -11,93 +13,73 @@ const trainColors: { [key: string]: string } = {
   emergency: '#ef4444', // red-500
 };
 
-// Manually defined track paths based on the image
-const trackPaths = {
-    // Incoming curved track from top
-    path1: (ctx: CanvasRenderingContext2D) => {
-        ctx.beginPath();
-        ctx.moveTo(100, 150);
-        ctx.bezierCurveTo(250, 50, 450, 50, 600, 200);
-        ctx.stroke();
+const statusColors: { [key in Train['status']]: string } = {
+    'on-time': '#22c55e', // green-500
+    'slowing': '#facc15', // yellow-400
+    'stopped': '#ef4444', // red-500
+    'delayed': '#f97316', // orange-500
+    'conflict': '#dc2626', // red-600
+}
+
+
+// --- Manually defined realistic junction layout ---
+// This represents a more complex station area with approaches, platforms, and exits.
+const layout = {
+    points: {
+        // Approach
+        'entry-ext': { x: 50, y: 300 },
+        'entry1': { x: 200, y: 150 },
+        'entry2': { x: 200, y: 450 },
+        // Station Platforms Start
+        'p1-start': { x: 350, y: 150 },
+        'p2-start': { x: 350, y: 250 },
+        'p3-start': { x: 350, y: 350 },
+        'p4-start': { x: 350, y: 450 },
+        // Station Platforms End
+        'p1-end': { x: 850, y: 150 },
+        'p2-end': { x: 850, y: 250 },
+        'p3-end': { x: 850, y: 350 },
+        'p4-end': { x: 850, y: 450 },
+        // Exits
+        'exit1': { x: 1000, y: 200 },
+        'exit2': { x: 1000, y: 400 },
+        'exit-ext': { x: 1150, y: 300 },
     },
-    // Incoming straight track
-    path2: (ctx: CanvasRenderingContext2D) => {
-        ctx.beginPath();
-        ctx.moveTo(100, 250);
-        ctx.lineTo(600, 200);
-        ctx.stroke();
-    },
-    // Incoming lower curve 1
-    path3: (ctx: CanvasRenderingContext2D) => {
-        ctx.beginPath();
-        ctx.moveTo(100, 350);
-        ctx.bezierCurveTo(250, 450, 450, 450, 600, 300);
-        ctx.stroke();
-    },
-     // Incoming lower curve 2
-    path4: (ctx: CanvasRenderingContext2D) => {
-        ctx.beginPath();
-        ctx.moveTo(100, 450);
-        ctx.bezierCurveTo(250, 550, 450, 550, 600, 400);
-        ctx.stroke();
-    },
-    // Outgoing straight tracks
-    outPath1: (ctx: CanvasRenderingContext2D) => {
-        ctx.beginPath();
-        ctx.moveTo(600, 200);
-        ctx.lineTo(900, 200);
-        ctx.stroke();
-    },
-    outPath2: (ctx: CanvasRenderingContext2D) => {
-        ctx.beginPath();
-        ctx.moveTo(600, 300);
-        ctx.lineTo(900, 300);
-        ctx.stroke();
-    },
-    outPath3: (ctx: CanvasRenderingContext2D) => {
-        ctx.beginPath();
-        ctx.moveTo(600, 400);
-        ctx.lineTo(900, 400);
-        ctx.stroke();
-    },
+    paths: {
+        'approach-ext': ['entry-ext', 'entry1'],
+        'approach1': ['entry1', 'p1-start'],
+        'approach2': ['entry2', 'p4-start'],
+        'crossover1': ['entry1', 'p2-start'],
+        'crossover2': ['entry2', 'p3-start'],
+        'platform1': ['p1-start', 'p1-end'],
+        'platform2': ['p2-start', 'p2-end'],
+        'platform3': ['p3-start', 'p3-end'],
+        'platform4': ['p4-start', 'p4-end'],
+        'crossover3': ['p1-end', 'exit1'],
+        'crossover4': ['p2-end', 'exit1'],
+        'crossover5': ['p3-end', 'exit2'],
+        'crossover6': ['p4-end', 'exit2'],
+        'exit1': ['exit1', 'exit-ext'],
+        'exit2': ['exit2', 'exit-ext'],
+    }
 };
 
 const getPointOnPath = (pathName: string, t: number) => {
-    // Simple interpolation for demonstration. A real implementation would solve the bezier equation.
-    switch(pathName) {
-        case 'path1':
-            const t1 = 1 - t; const t1_2 = t1 * t1; const t1_3 = t1_2 * t1;
-            const x1 = t1_3 * 100 + 3 * t1_2 * t * 250 + 3 * t1 * t * t * 450 + t * t * t * 600;
-            const y1 = t1_3 * 150 + 3 * t1_2 * t * 50 + 3 * t1 * t * t * 50 + t * t * t * 200;
-            return {x: x1, y: y1};
-        case 'path2':
-            return { x: 100 + (600 - 100) * t, y: 250 + (200 - 250) * t };
-        case 'path3':
-            const t3 = 1 - t; const t3_2 = t3 * t3; const t3_3 = t3_2 * t3;
-            const x3 = t3_3 * 100 + 3 * t3_2 * t * 250 + 3 * t3 * t * t * 450 + t * t * t * 600;
-            const y3 = t3_3 * 350 + 3 * t3_2 * t * 450 + 3 * t3 * t * t * 450 + t * t * t * 300;
-            return {x: x3, y: y3};
-        case 'path4':
-            const t4 = 1 - t; const t4_2 = t4 * t4; const t4_3 = t4_2 * t4;
-            const x4 = t4_3 * 100 + 3 * t4_2 * t * 250 + 3 * t4 * t * t * 450 + t * t * t * 600;
-            const y4 = t4_3 * 450 + 3 * t4_2 * t * 550 + 3 * t4 * t * t * 550 + t * t * t * 400;
-            return {x: x4, y: y4};
-        case 'outPath1':
-             return { x: 600 + (900 - 600) * t, y: 200 };
-        case 'outPath2':
-             return { x: 600 + (900 - 600) * t, y: 300 };
-        case 'outPath3':
-             return { x: 600 + (900 - 600) * t, y: 400 };
-        default:
-            return {x: 0, y: 0}
-    }
-}
+    const path = layout.paths[pathName as keyof typeof layout.paths];
+    if (!path) return { x: 0, y: 0 };
+    const from = layout.points[path[0] as keyof typeof layout.points];
+    const to = layout.points[path[1] as keyof typeof layout.points];
+    if (!from || !to) return {x: 0, y: 0};
+    
+    // Linear interpolation
+    return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+};
 
 
 export function MapComponent({ section }: { section: Section }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { trains } = useSimulation();
-  const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
+  const [view, setView] = useState({ x: 0, y: 0, zoom: 0.8 });
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 });
 
@@ -111,13 +93,20 @@ export function MapComponent({ section }: { section: Section }) {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         const zoomFactor = 1.1;
-        const newZoom = e.deltaY < 0 ? view.zoom * zoomFactor : view.zoom / zoomFactor;
         
+        let newZoom;
+        if (e.deltaY < 0) {
+            newZoom = view.zoom * zoomFactor;
+        } else {
+            newZoom = view.zoom / zoomFactor;
+        }
+        newZoom = Math.max(0.2, Math.min(newZoom, 5));
+
         const worldX = (mouseX - view.x) / view.zoom;
         const worldY = (mouseY - view.y) / view.zoom;
 
         setView({
-            zoom: Math.max(0.25, Math.min(newZoom, 4)),
+            zoom: newZoom,
             x: mouseX - worldX * newZoom,
             y: mouseY - worldY * newZoom
         });
@@ -128,9 +117,8 @@ export function MapComponent({ section }: { section: Section }) {
         setLastPanPoint({ x: e.clientX, y: e.clientY });
     };
 
-    const handleMouseUp = () => {
-        setIsPanning(false);
-    };
+    const handleMouseUp = () => { setIsPanning(false); };
+    const handleMouseLeave = () => { setIsPanning(false); };
 
     const handleMouseMove = (e: MouseEvent) => {
         if (!isPanning) return;
@@ -140,21 +128,21 @@ export function MapComponent({ section }: { section: Section }) {
         setLastPanPoint({ x: e.clientX, y: e.clientY });
     };
     
-    canvas.addEventListener('wheel', handleWheel);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('mouseleave', handleMouseUp);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
     canvas.addEventListener('mousemove', handleMouseMove);
 
     return () => {
         canvas.removeEventListener('wheel', handleWheel);
         canvas.removeEventListener('mousedown', handleMouseDown);
         canvas.removeEventListener('mouseup', handleMouseUp);
-        canvas.removeEventListener('mouseleave', handleMouseUp);
+        canvas.removeEventListener('mouseleave', handleMouseLeave);
         canvas.removeEventListener('mousemove', handleMouseMove);
     };
 
-  }, [isPanning, lastPanPoint, view]);
+  }, [isPanning, lastPanPoint, view.zoom]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -171,47 +159,71 @@ export function MapComponent({ section }: { section: Section }) {
     canvas.height = rect.height * dpr;
     ctx.scale(dpr, dpr);
     
-    const { width, height } = rect;
-
     let animationFrameId: number;
     const render = () => {
-        ctx.clearRect(0, 0, width, height);
-
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save();
         ctx.translate(view.x, view.y);
         ctx.scale(view.zoom, view.zoom);
 
         // --- Draw Tracks ---
         ctx.strokeStyle = trackColor;
-        ctx.lineWidth = 2 / view.zoom;
-        Object.values(trackPaths).forEach(drawPath => drawPath(ctx));
-
-        // --- Draw Arrows ---
-        ctx.fillStyle = trackColor;
-        const drawArrow = (x: number, y: number) => {
+        ctx.lineWidth = 3 / view.zoom;
+        Object.values(layout.paths).forEach(path => {
+            const from = layout.points[path[0] as keyof typeof layout.points];
+            const to = layout.points[path[1] as keyof typeof layout.points];
             ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x - 10 / view.zoom, y - 5 / view.zoom);
-            ctx.lineTo(x - 10 / view.zoom, y + 5 / view.zoom);
-            ctx.closePath();
+            ctx.moveTo(from.x, from.y);
+            ctx.lineTo(to.x, to.y);
+            ctx.stroke();
+        });
+
+        // --- Draw Junction/Station Points ---
+        ctx.fillStyle = stationColor;
+        ctx.strokeStyle = '#9ca3af'; // gray-400
+        ctx.lineWidth = 2 / view.zoom;
+        Object.values(layout.points).forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 8 / view.zoom, 0, 2 * Math.PI);
             ctx.fill();
-        }
-        drawArrow(895, 200);
-        drawArrow(895, 300);
-        drawArrow(895, 400);
+            ctx.stroke();
+        });
 
         // --- Draw Trains ---
         trains.forEach(train => {
             const point = getPointOnPath(train.path, train.progress);
+            if(point.x === 0 && point.y === 0) return;
+
+            // Train Body
             ctx.fillStyle = trainColors[train.type] || '#fff';
             ctx.beginPath();
-            ctx.arc(point.x, point.y, 8 / view.zoom, 0, 2 * Math.PI);
+            ctx.arc(point.x, point.y, 10 / view.zoom, 0, 2 * Math.PI);
             ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5 / view.zoom;
+            ctx.stroke();
 
+            // Micro-details text
             ctx.fillStyle = '#fff';
-            ctx.font = `${10 / view.zoom}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.fillText(train.id, point.x, point.y - (12 / view.zoom));
+            ctx.font = `${12 / view.zoom}px sans-serif`;
+            ctx.textAlign = 'left';
+            const speedKmph = (train.speed / train.maxSpeed * (allTrains[train.id]?.maxSpeed_kmph || 90)).toFixed(0);
+            
+            const textLines = [
+                `ID: ${train.id}`,
+                `Spd: ${speedKmph} km/h`,
+                `Status: ${train.status}`,
+            ];
+            
+            textLines.forEach((line, index) => {
+                ctx.fillText(line, point.x + 15 / view.zoom, point.y + (5 / view.zoom) + (index * 14 / view.zoom));
+            });
+
+            // Status Indicator on train
+            ctx.fillStyle = statusColors[train.status] || '#fff';
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 4 / view.zoom, 0, 2 * Math.PI);
+            ctx.fill();
         });
         
         ctx.restore();
@@ -225,5 +237,5 @@ export function MapComponent({ section }: { section: Section }) {
 
   }, [trains, view]);
 
-  return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing" />;
+  return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-gray-800 rounded-lg" />;
 }
