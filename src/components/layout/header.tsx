@@ -1,6 +1,6 @@
 'use client';
 
-import { Train, Menu } from 'lucide-react';
+import { Train } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -43,26 +43,6 @@ export function Header({ sectionName }: { sectionName: string }) {
             <h2 className="text-md font-semibold md:text-lg">{sectionName}</h2>
             <p className="text-xs text-muted-foreground">Section Controller Dashboard</p>
         </div>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="secondary" size="icon" className="rounded-full">
-              <Avatar>
-                <AvatarImage src="https://i.pravatar.cc/150?u=a042581f4e29026704d" alt="@shadcn" />
-                <AvatarFallback>SC</AvatarFallback>
-              </Avatar>
-              <span className="sr-only">Toggle user menu</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Anand Kumar</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Settings</DropdownMenuItem>
-            <DropdownMenuItem>Support</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Logout</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </header>
   );

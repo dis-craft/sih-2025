@@ -173,6 +173,91 @@ const complexJunctionLayout: Layout = {
     }
 };
 
+const awajiStationLayout: Layout = {
+    points: {
+        // West Entry/Exit (Kyoto Main Line)
+        'KML_W_IN':  { x: 50, y: 250, mile: 0 },
+        'KML_W_OUT': { x: 50, y: 300, mile: 0 },
+
+        // East Entry/Exit (Kyoto Main Line)
+        'KML_E_IN':  { x: 1150, y: 400, mile: 20 },
+        'KML_E_OUT': { x: 1150, y: 450, mile: 20 },
+
+        // South Entry/Exit (Senri Line)
+        'SL_S_IN':  { x: 250, y: 550, mile: 0 },
+        'SL_S_OUT': { x: 300, y: 550, mile: 0 },
+
+        // North Entry/Exit (Senri Line)
+        'SL_N_IN':  { x: 950, y: 50, mile: 20 },
+        'SL_N_OUT': { x: 1000, y: 50, mile: 20 },
+
+        // Platforms
+        'P2': { x: 600, y: 175, label: 'P2', isPlatform: true, mile: 10 },
+        'P3': { x: 600, y: 225, label: 'P3', isPlatform: true, mile: 10 },
+        'P4': { x: 600, y: 375, label: 'P4', isPlatform: true, mile: 10 },
+        'P5': { x: 600, y: 425, label: 'P5', isPlatform: true, mile: 10 },
+        
+        // Junctions & Crossovers
+        'J_W1': { x: 350, y: 275, mile: 4 }, // West main junction
+        'J_P23_W': { x: 450, y: 200, mile: 8 }, 'J_P23_E': { x: 750, y: 200, mile: 12 },
+        'J_P45_W': { x: 450, y: 400, mile: 8 }, 'J_P45_E': { x: 750, y: 400, mile: 12 },
+
+        // Senri Line merge/diverge points
+        'J_SL_S': { x: 400, y: 475, mile: 5 },
+        'J_SL_N': { x: 850, y: 125, mile: 15 },
+        
+        // Crossover points
+        'C_W_1': { x: 400, y: 225, mile: 6 }, 'C_W_2': { x: 400, y: 375, mile: 6},
+        'C_E_1': { x: 800, y: 225, mile: 14 }, 'C_E_2': { x: 800, y: 375, mile: 14 },
+    },
+    tracks: {
+        // Kyoto Main Line (KML) Westbound (right-to-left) -> P3/P4
+        'KML_E_IN-J_P45_E': { points: ['KML_E_IN', 'J_P45_E'] },
+        'J_P45_E-P4': { points: ['J_P45_E', 'P4'] },
+        'P4-J_P45_W': { points: ['P4', 'J_P45_W'] },
+        'J_P45_W-J_W1': { points: ['J_P45_W', 'J_W1'], controlPoints: ['C_W_2'] },
+        'J_W1-KML_W_OUT': { points: ['J_W1', 'KML_W_OUT'] },
+        
+        'J_P45_E-P3_X': { points: ['J_P45_E', 'J_P23_E'], controlPoints: ['C_E_2', 'C_E_1']},
+        'J_P23_E-P3': { points: ['J_P23_E', 'P3']},
+        'P3-J_P23_W': { points: ['P3', 'J_P23_W']},
+        'J_P23_W-J_W1': { points: ['J_P23_W', 'J_W1'], controlPoints: ['C_W_1']},
+
+        // Kyoto Main Line (KML) Eastbound (left-to-right) -> P2/P5
+        'KML_W_IN-J_W1': { points: ['KML_W_IN', 'J_W1'] },
+        'J_W1-J_P23_W': { points: ['J_W1', 'J_P23_W'], controlPoints: ['C_W_1']},
+        'J_P23_W-P2': { points: ['J_P23_W', 'P2']},
+        'P2-J_P23_E': { points: ['P2', 'J_P23_E']},
+        'J_P23_E-J_SL_N': { points: ['J_P23_E', 'J_SL_N'], controlPoints: ['C_E_1']},
+        'J_SL_N-SL_N_OUT': { points: ['J_SL_N', 'SL_N_OUT']},
+        
+        'J_W1-J_P45_W': { points: ['J_W1', 'J_P45_W'], controlPoints: ['C_W_2']},
+        'J_P45_W-P5': { points: ['J_P45_W', 'P5']},
+        'P5-J_P45_E': { points: ['P5', 'J_P45_E']},
+        'J_P45_E-KML_E_OUT': { points: ['J_P45_E', 'KML_E_OUT']},
+
+        // Senri Line (SL) Southbound (North to South, right-to-left)
+        'SL_N_IN-J_SL_N': { points: ['SL_N_IN', 'J_SL_N']},
+        'J_SL_N-P2': { points: ['J_SL_N', 'P2']}, // Assuming SL trains can use P2
+        // Path continues from P2 to south...
+        'P2-J_W1_X': { points: ['P2', 'J_W1'], controlPoints: ['J_P23_W', 'C_W_1']},
+        'J_W1-J_SL_S': { points: ['J_W1', 'J_SL_S'], controlPoints: [{x: 375, y: 350, mile: 5}]},
+        'J_SL_S-SL_S_OUT': { points: ['J_SL_S', 'SL_S_OUT']},
+
+        // Senri Line (SL) Northbound (South to North, left-to-right)
+        'SL_S_IN-J_SL_S': { points: ['SL_S_IN', 'J_SL_S']},
+        'J_SL_S-P5': { points: ['J_SL_S', 'P5'], controlPoints: ['J_P45_W']}, // Assuming SL trains can use P5
+        // Path continues from P5 to north...
+        'P5-J_SL_N_X': { points: ['P5', 'J_SL_N'], controlPoints: ['J_P45_E', 'C_E_2', 'C_E_1']},
+        'J_SL_N-SL_N_OUT_2': { points: ['J_SL_N', 'SL_N_OUT']},
+    },
+    config: {
+        trackColor: '#22c55e', // A more vibrant green
+        stationColor: '#e5e7eb',
+        platformColor: '#808080',
+    }
+}
+
 
 const normalOpsTrains: Partial<Train>[] = [
     { id: 'T12613', path: ['T1'], baseSpeed: 100, platformHaltDuration: 2, startTime: 0, priority: 'high', cargo: null },
@@ -200,7 +285,10 @@ export const simulationCases: Record<string, SimulationCase> = {
         metrics: { throughput: 6, avgDelay: 5.5 },
         layout: case1Layout,
         initialTrains: [
-            ...normalOpsTrains,
+            { id: 'T12613', path: ['T1'], baseSpeed: 100, platformHaltDuration: 2, startTime: 0, priority: 'high' },
+            { id: 'F5678', path: ['T2'], baseSpeed: 50, platformHaltDuration: 5, startTime: 5, priority: 'low' },
+            { id: 'T16216', path: ['T3'], baseSpeed: 100, platformHaltDuration: 2, startTime: 2, priority: 'high' },
+            { id: 'T20660', path: ['T4'], baseSpeed: 50, platformHaltDuration: 5, startTime: 7, priority: 'low' },
             { id: 'EM01', path: ['T1'], baseSpeed: 100, platformHaltDuration: 2, startTime: 10, priority: 'high' },
             { id: 'T12345', path: ['T4'], baseSpeed: 50, platformHaltDuration: 5, startTime: 12, priority: 'low', cargo: 'automobiles' }
         ],
@@ -215,7 +303,7 @@ export const simulationCases: Record<string, SimulationCase> = {
         layout: case1Layout,
         initialTrains: [
             { id: 'T12613', path: ['T1'], baseSpeed: 100, platformHaltDuration: 2, startTime: 0, priority: 'high' },
-            { id: 'F5678', path: ['T1'], baseSpeed: 50, platformHaltDuration: 5, startTime: 5, priority: 'low' }, // Rerouted
+            { id: 'F5678', path: ['T1'], baseSpeed: 50, platformHaltDuration: 5, startTime: 5, priority: 'low', sidingHaltDuration: 10 }, // Rerouted
             { id: 'T16216', path: ['T3'], baseSpeed: 100, platformHaltDuration: 2, startTime: 2, priority: 'high' },
             { id: 'T20660', path: ['T4'], baseSpeed: 50, platformHaltDuration: 5, startTime: 7, priority: 'low' },
         ],
@@ -232,8 +320,8 @@ export const simulationCases: Record<string, SimulationCase> = {
         layout: case1Layout,
         initialTrains: [
              { id: 'T12613', path: ['T1'], baseSpeed: 100, platformHaltDuration: 2, startTime: 0, priority: 'high' },
-             { id: 'F5678', path: ['T2'], baseSpeed: 50, platformHaltDuration: 5, startTime: 5, priority: 'low', cargo: 'perishables' },
-             { id: 'T16216', path: ['T3'], baseSpeed: 100, platformHaltDuration: 2, startTime: 7, priority: 'high' }, // Delayed
+             { id: 'F5678', path: ['T2'], baseSpeed: 50, platformHaltDuration: 5, startTime: 5, priority: 'low', cargo: 'perishables', sidingHaltDuration: 5 },
+             { id: 'T16216', path: ['T3'], baseSpeed: 100, platformHaltDuration: 2, startTime: 2, priority: 'high', delay: 5 }, // Delayed start
              { id: 'T20660', path: ['T4'], baseSpeed: 50, platformHaltDuration: 5, startTime: 7, priority: 'low' },
         ],
         config: {
@@ -267,6 +355,25 @@ export const simulationCases: Record<string, SimulationCase> = {
             { id: 'T16216', baseSpeed: 70, platformHaltDuration: 2, startTime: 2, priority: 'high', path: ['S4-J3', 'J3-P2', 'P2-J8', 'J8-S2']}, // S4 -> P2 -> S2
             { id: 'F5678', baseSpeed: 40, platformHaltDuration: 5, startTime: 4, priority: 'low', path: ['S3-J5', 'J5-P3', 'P3-J9', 'J9-S2']},    // S3 -> P3 -> S2
             { id: 'T20660', baseSpeed: 70, platformHaltDuration: 2, startTime: 6, priority: 'high', path: ['S4-J3', 'J3-J4', 'J4-P3', 'P3-J9', 'J9-S2']}, // S4 -> P3 -> S2 (conflict with F5678)
+        ],
+        config: {}
+    },
+    'case9': {
+        id: 'case9',
+        name: 'Awaji Station Model',
+        description: 'A realistic simulation of the complex Awaji Station junction in Japan, featuring multiple merging and diverging lines.',
+        sectionId: SECTION_ID,
+        metrics: { throughput: 4, avgDelay: 4.2 },
+        layout: awajiStationLayout,
+        initialTrains: [
+            // Kyoto Main Line Eastbound -> Platform 5 -> KML East Exit
+            { id: 'T_KML_EB', baseSpeed: 80, platformHaltDuration: 2, startTime: 0, priority: 'high', path: ['KML_W_IN-J_W1', 'J_W1-J_P45_W', 'J_P45_W-P5', 'P5-J_P45_E', 'J_P45_E-KML_E_OUT']},
+            // Senri Line Northbound -> Platform 5 -> KML East Exit (merging)
+            { id: 'T_SL_NB', baseSpeed: 70, platformHaltDuration: 2, startTime: 2, priority: 'high', path: ['SL_S_IN-J_SL_S', 'J_SL_S-P5', 'P5-J_P45_E', 'J_P45_E-KML_E_OUT']},
+            // Kyoto Main Line Westbound -> Platform 3 -> KML West Exit
+            { id: 'T_KML_WB', baseSpeed: 80, platformHaltDuration: 2, startTime: 1, priority: 'high', path: ['KML_E_IN-J_P45_E', 'J_P45_E-P3_X', 'J_P23_E-P3', 'P3-J_P23_W', 'J_P23_W-J_W1', 'J_W1-KML_W_OUT']},
+            // Senri Line Southbound -> Platform 2 -> Senri South Exit
+            { id: 'T_SL_SB', baseSpeed: 70, platformHaltDuration: 2, startTime: 3, priority: 'high', path: ['SL_N_IN-J_SL_N', 'J_SL_N-P2', 'P2-J_W1_X', 'J_W1-J_SL_S', 'J_SL_S-SL_S_OUT']},
         ],
         config: {}
     }
