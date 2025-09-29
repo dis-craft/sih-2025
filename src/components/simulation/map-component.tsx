@@ -2,7 +2,7 @@
 import { useRef, useEffect, useState } from 'react';
 import type { Section } from '@/lib/schema';
 import { useSimulation, Train } from '@/hooks/use-simulation';
-import { stations as allStations } from '@/lib/data';
+import { stations as allStations, trains as allTrains } from '@/lib/data';
 
 const trackColor = '#4b5563'; // gray-600
 const stationColor = '#e5e7eb'; // gray-200
