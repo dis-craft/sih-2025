@@ -1,9 +1,11 @@
 'use client';
-import { Play, Pause, StepForward, RotateCcw } from 'lucide-react';
+import { Play, Pause, StepForward, RotateCcw, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '../ui/badge';
 import { Simulation } from '@/lib/schema';
+import { Slider } from '@/components/ui/slider';
+import { Label } from '@/components/ui/label';
 
 
 const statusVariantMap: { [key in Simulation['status']]: 'default' | 'secondary' | 'destructive' } = {
@@ -14,16 +16,20 @@ const statusVariantMap: { [key in Simulation['status']]: 'default' | 'secondary'
 
 export function TimeControl({ 
     simStatus,
+    simSpeed,
     onPlay,
     onPause,
     onStep,
-    onReset
+    onReset,
+    onSpeedChange,
 }: { 
     simStatus: Simulation['status'],
+    simSpeed: number,
     onPlay: () => void,
     onPause: () => void,
     onStep: () => void,
-    onReset: () => void
+    onReset: () => void,
+    onSpeedChange: (speed: number) => void,
 }) {
   return (
     <Card>
@@ -49,6 +55,23 @@ export function TimeControl({
             <RotateCcw className="h-4 w-4" />
             <span className="sr-only">Reset</span>
           </Button>
+        </div>
+        <div className='mt-4 space-y-2'>
+            <div className='flex items-center justify-between'>
+                <Label htmlFor="speed-control" className='text-sm flex items-center gap-2'>
+                    <Zap className='h-4 w-4' />
+                    Speed
+                </Label>
+                <span className='text-xs text-muted-foreground'>{simSpeed}x</span>
+            </div>
+            <Slider
+                id="speed-control"
+                min={1}
+                max={10}
+                step={1}
+                defaultValue={[simSpeed]}
+                onValueChange={(value) => onSpeedChange(value[0])}
+            />
         </div>
       </CardContent>
     </Card>

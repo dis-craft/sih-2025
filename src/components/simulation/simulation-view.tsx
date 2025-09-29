@@ -13,11 +13,13 @@ export function SimulationView({ section, simulation }: { section: Section, simu
     <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-4">
       <div className="flex flex-col sm:flex-row gap-4">
         <TimeControl 
-          simStatus={sim.isRunning ? 'running' : 'paused'} 
+          simStatus={sim.isRunning ? 'running' : 'paused'}
+          simSpeed={sim.simulationSpeed} 
           onPlay={() => sim.setIsRunning(true)}
           onPause={() => sim.setIsRunning(false)}
           onReset={sim.reset}
           onStep={sim.step}
+          onSpeedChange={sim.setSimulationSpeed}
         />
         <KPIPanel metrics={simulation.metrics} />
       </div>
