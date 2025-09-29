@@ -1,3 +1,4 @@
+'use client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   BarChart, AlertTriangle, Gauge, Timer, Percent, Users, ShieldCheck, Zap, ArrowRightLeft, Clock
