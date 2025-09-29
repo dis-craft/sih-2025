@@ -34,8 +34,6 @@ export type SimulationMetrics = {
 // Simulation constants
 const TIME_STEP_S = 10; // Each tick is 10 seconds of simulation time
 const SECTION_LENGTH_MI = 20;
-const STATION_MILE = 10;
-const SIDING_MILE = 12;
 const SIDING_HALT_DURATION_MIN = 5;
 const HEADWAY_MIN = 5;
 
@@ -83,18 +81,18 @@ export const useSimulation = (caseId: string) => {
         setSimulationTime(newSimTime);
         
         setTrains(currentTrains => {
-            const newTrains = [...currentTrains];
+            let newTrains = JSON.parse(JSON.stringify(currentTrains));
 
             for (let i = 0; i < newTrains.length; i++) {
                 const train = newTrains[i];
 
                 if (train.status === 'finished') continue;
                 
-                // Introduce delay if needed
                 const actualStartTime = train.startTime + (simCase.initialTrains.find(t=>t.id === train.id)?.delay || 0);
 
                 if (train.position < 0 && newSimTime >= actualStartTime) {
-                    train.position = 0;
+                    const entryPoint = simCase.layout.points[simCase.layout.tracks[train.track].points[0]];
+                    train.position = entryPoint.mile;
                     train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
                     train.status = 'on-time';
                 }
@@ -117,18 +115,23 @@ export const useSimulation = (caseId: string) => {
                 const currentTrackId = train.track;
                 const currentTrackLayout = simCase.layout.tracks[currentTrackId];
                 if (currentTrackLayout) {
-                    const trackEndMile = simCase.layout.points[currentTrackLayout.points[1]]?.mile;
+                    const toPoint = simCase.layout.points[currentTrackLayout.points[1]];
+                    const trackEndMile = toPoint.mile;
     
-                    if (trackEndMile !== undefined && train.position >= trackEndMile && train.currentPathIndex < train.path.length - 1) {
+                    if (toPoint && train.position >= trackEndMile && train.currentPathIndex < train.path.length - 1) {
                         train.currentPathIndex++;
-                        train.track = train.path[train.currentPathIndex];
-                        // Position might need adjustment if tracks have different start miles, but we assume start at the end of the previous one
-                        train.position = simCase.layout.points[simCase.layout.tracks[train.track]?.points[0]]?.mile || train.position;
+                        const nextTrackId = train.path[train.currentPathIndex];
+                        const nextTrackLayout = simCase.layout.tracks[nextTrackId];
+                        if (nextTrackLayout) {
+                            train.track = nextTrackId;
+                            const fromPointNextTrack = simCase.layout.points[nextTrackLayout.points[0]];
+                            train.position = fromPointNextTrack.mile;
+                        }
                     }
                 }
-
-
-                if (!train.hasHaltedAtPlatform && Math.abs(train.position - STATION_MILE) < 0.2) {
+                
+                const currentPoint = simCase.layout.points[simCase.layout.tracks[train.track]?.points[1]];
+                if (currentPoint?.isPlatform && !train.hasHaltedAtPlatform && Math.abs(train.position - currentPoint.mile) < 0.2) {
                     train.status = 'at-platform';
                     train.haltTimer = train.platformHaltDuration;
                     train.hasHaltedAtPlatform = true;
@@ -151,8 +154,8 @@ export const useSimulation = (caseId: string) => {
                 }
                 
                 const headwayDistance = (train.baseSpeed / 60) * HEADWAY_MIN;
-                const stoppingDistance = headwayDistance * 1.5; 
-                const slowingDistance = headwayDistance * 2.5;
+                const stoppingDistance = headwayDistance * 2; // Increased distance
+                const slowingDistance = headwayDistance * 3; // Increased distance
 
                 if (leadTrainDistance < stoppingDistance) {
                     newSpeed = 0;
@@ -162,22 +165,24 @@ export const useSimulation = (caseId: string) => {
                     newStatus = 'slowing';
                 }
 
-                // Siding logic for low priority trains
-                const highPriorityConflict = newTrains.find(t => 
-                    t.priority === 'high' && 
-                    train.priority === 'low' &&
-                    t.track === train.track &&
-                    t.position < train.position + slowingDistance &&
-                    t.position > train.position - stoppingDistance
-                );
+                const sidingPoint = Object.values(simCase.layout.points).find(p => p.label === 'S');
+                if (sidingPoint && train.priority === 'low') {
+                    const highPriorityConflict = newTrains.find(t => 
+                        t.priority === 'high' && 
+                        t.track === train.track &&
+                        t.position < train.position + slowingDistance &&
+                        t.position > train.position - stoppingDistance
+                    );
 
-                if (highPriorityConflict && Math.abs(train.position - SIDING_MILE) < 1 && train.status !== 'in-siding') {
-                    const extraHalt = simCase.initialTrains.find(t=>t.id === train.id)?.sidingHaltDuration || SIDING_HALT_DURATION_MIN;
-                    train.status = 'in-siding';
-                    train.haltTimer = extraHalt;
-                    newSpeed = 0;
-                    train.position = SIDING_MILE;
+                    if (highPriorityConflict && Math.abs(train.position - sidingPoint.mile) < 1 && train.status !== 'in-siding') {
+                        const extraHalt = simCase.initialTrains.find(t=>t.id === train.id)?.sidingHaltDuration || SIDING_HALT_DURATION_MIN;
+                        train.status = 'in-siding';
+                        train.haltTimer = extraHalt;
+                        newSpeed = 0;
+                        train.position = sidingPoint.mile;
+                    }
                 }
+
 
                 if (newStatus === 'stopped' || newStatus === 'slowing') {
                     train.totalDelay += timeDeltaMin;
@@ -191,11 +196,13 @@ export const useSimulation = (caseId: string) => {
                 const distanceMoved = train.speed * (TIME_STEP_S / 3600);
                 train.position += distanceMoved * simulationSpeedRef.current;
 
-                if (train.position >= SECTION_LENGTH_MI) {
+                const exitPoints = Object.values(simCase.layout.points).filter(p => p.label?.startsWith('S') && p.mile > 0);
+                if (exitPoints.some(p => Math.abs(p.mile - train.position) < 0.5)) {
                     train.status = 'finished';
                     train.speed = 0;
                     train.completionTime = newSimTime;
                 }
+
 
                 newTrains[i] = train;
             }
@@ -211,7 +218,7 @@ export const useSimulation = (caseId: string) => {
         const avgDelay = (activeTrains.length + finishedTrains.length) > 0 ? totalDelay / (activeTrains.length + finishedTrains.length) : 0;
         
         // Throughput: trains finished per hour
-        const firstStartTime = Math.min(...simCase.initialTrains.map(t => t.startTime));
+        const firstStartTime = Math.min(...simCase.initialTrains.map(t => t.startTime).filter(t => t !== undefined));
         const timeWindowHours = Math.max(newSimTime - firstStartTime, 1) / 60;
         const throughput = finishedTrains.length / timeWindowHours;
 
@@ -234,7 +241,8 @@ export const useSimulation = (caseId: string) => {
             return acc;
         }, 0);
         
-        const efficiency = (idealTime > 0 && actualTime > 0) ? idealTime / actualTime : 0;
+        let efficiency = (idealTime > 0 && actualTime > 0) ? idealTime / actualTime : 0;
+        efficiency = Math.min(efficiency, 1); // Cap efficiency at 100%
 
         setMetrics({
             throughput: parseFloat(throughput.toFixed(1)),

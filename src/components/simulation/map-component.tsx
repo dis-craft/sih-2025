@@ -1,4 +1,3 @@
-
 'use client';
 import { useRef, useEffect, useState } from 'react';
 import type { Section } from '@/lib/schema';
@@ -40,8 +39,16 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
     const controlPoint1 = trackLayout.controlPoints?.[0] ? currentLayout.points[trackLayout.controlPoints[0]] : null;
     const controlPoint2 = trackLayout.controlPoints?.[1] ? currentLayout.points[trackLayout.controlPoints[1]] : null;
 
-    const totalLength = 20;
-    const t = mile / totalLength;
+    const totalLength = 20; // This is a simplification; for complex routes, this should be track-specific
+    
+    const startMile = fromPoint.mile;
+    const endMile = toPoint.mile;
+    const trackLength = Math.abs(endMile - startMile);
+
+    if (trackLength === 0) return { x: fromPoint.x, y: fromPoint.y };
+
+    const t = (mile - startMile) / trackLength;
+
 
     if (controlPoint1 && controlPoint2) { // Cubic Bezier
       const x = (1-t)**3 * fromPoint.x + 3*(1-t)**2 * t * controlPoint1.x + 3*(1-t) * t**2 * controlPoint2.x + t**3 * toPoint.x;
@@ -172,9 +179,13 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
         Object.values(layout.points).forEach(p => {
              if (p.label) {
                 ctx.fillStyle = p.isPlatform ? layout.config.platformColor : layout.config.stationColor;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, (p.isPlatform ? 10 : 7) / view.zoom, 0, 2 * Math.PI);
-                ctx.fill();
+                if(p.isPlatform) {
+                  ctx.fillRect(p.x - 50/view.zoom, p.y - 10/view.zoom, 100/view.zoom, 20/view.zoom);
+                } else {
+                  ctx.beginPath();
+                  ctx.arc(p.x, p.y, (p.isPlatform ? 10 : 7) / view.zoom, 0, 2 * Math.PI);
+                  ctx.fill();
+                }
                 
                 ctx.fillStyle = '#fff';
                 ctx.font = `bold ${12 / view.zoom}px sans-serif`;
