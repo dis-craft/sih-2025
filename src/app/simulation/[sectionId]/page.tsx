@@ -11,6 +11,8 @@ import { Bot, Settings } from "lucide-react";
 import { AICopilot } from "@/components/simulation/ai-copilot";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
+import { KPIPanel } from "@/components/simulation/kpi-panel";
+import { useSimulation } from "@/hooks/use-simulation";
 
 export default function SimulationPage({ params, searchParams }: { 
     params: { sectionId: string },
@@ -24,7 +26,7 @@ export default function SimulationPage({ params, searchParams }: {
     }
     
     const caseId = typeof searchParams.case === 'string' ? searchParams.case : 'case1';
-
+    
     return (
         <SidebarProvider>
             <div className="flex flex-col h-screen bg-background text-foreground">
@@ -49,11 +51,15 @@ export default function SimulationPage({ params, searchParams }: {
                             <SimulationView section={section} caseId={caseId} />
                             <div className="md:col-span-1 lg:col-span-1 flex flex-col gap-4 h-full">
                                 <AICopilot />
-                                <Tabs defaultValue="requests" className="flex-1 flex flex-col min-h-0">
-                                  <TabsList className="grid w-full grid-cols-2">
-                                    <TabsTrigger value="requests">Request Queue</TabsTrigger>
-                                    <TabsTrigger value="audit">Audit Trail</TabsTrigger>
+                                <Tabs defaultValue="kpis" className="flex-1 flex flex-col min-h-0">
+                                  <TabsList className="grid w-full grid-cols-3">
+                                    <TabsTrigger value="kpis">Live KPIs</TabsTrigger>
+                                    <TabsTrigger value="requests">Queue</TabsTrigger>
+                                    <TabsTrigger value="audit">Audit</TabsTrigger>
                                   </TabsList>
+                                   <TabsContent value="kpis" className="flex-1 min-h-0">
+                                    <KPIPanel caseId={caseId} />
+                                  </TabsContent>
                                   <TabsContent value="requests" className="flex-1 min-h-0">
                                     <Card className='h-full flex flex-col'>
                                       <RequestQueue sectionId={section.id}/>

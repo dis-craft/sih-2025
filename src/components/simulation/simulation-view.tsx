@@ -7,6 +7,7 @@ import { MapComponent } from './map-component';
 import { useSimulation } from '@/hooks/use-simulation';
 import { simulationCases } from '@/lib/simulation-cases';
 import { notFound } from 'next/navigation';
+import { Card } from '../ui/card';
 
 export function SimulationView({ section, caseId }: { section: Section, caseId: string }) {
   const sim = useSimulation(caseId);
@@ -16,15 +17,8 @@ export function SimulationView({ section, caseId }: { section: Section, caseId: 
     notFound();
   }
 
-  const metrics = {
-    throughput: sim.metrics.throughput,
-    avgDelay: sim.metrics.avgDelay,
-    efficiency: sim.metrics.efficiency,
-  };
-
   return (
     <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <TimeControl 
           simStatus={sim.isRunning ? 'running' : 'paused'}
           simSpeed={sim.simulationSpeed} 
@@ -34,8 +28,6 @@ export function SimulationView({ section, caseId }: { section: Section, caseId: 
           onStep={sim.step}
           onSpeedChange={sim.setSimulationSpeed}
         />
-        <KPIPanel metrics={metrics} />
-      </div>
       <div className="flex-1 min-h-[300px] md:min-h-0 bg-card rounded-lg border">
         <MapComponent section={section} caseId={caseId} />
       </div>
