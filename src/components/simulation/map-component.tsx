@@ -5,15 +5,6 @@ import { useSimulation } from '@/hooks/use-simulation';
 import { simulationCases } from '@/lib/simulation-cases';
 import { allTrains as staticTrainData } from '@/lib/data';
 
-const trackColor = '#4b5563'; // gray-600
-const stationColor = '#e5e7eb'; // gray-200
-const trainColors: { [key: string]: string } = {
-  express: '#f97316', // orange-500
-  passenger: '#3b82f6', // blue-500
-  freight: '#6b7280', // gray-500
-  emergency: '#ef4444', // red-500
-};
-
 const statusColors: { [key: string]: string } = {
     'on-time': '#22c55e', // green-500
     'slowing': '#facc15', // yellow-400
@@ -37,18 +28,34 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
   }
   const { layout } = simCase;
 
-  const getPointForPosition = (trackId: string, mile: number) => {
-    const trackLayout = layout.tracks[trackId];
+  const getPointForPosition = (trackId: string, mile: number, currentLayout: typeof layout) => {
+    const trackLayout = currentLayout.tracks[trackId];
     if (!trackLayout) return null;
-    const fromPoint = layout.points[trackLayout.points[0]];
-    const toPoint = layout.points[trackLayout.points[1]];
+    
+    const fromPoint = currentLayout.points[trackLayout.points[0]];
+    const toPoint = currentLayout.points[trackLayout.points[1]];
     if (!fromPoint || !toPoint) return null;
 
-    const percentage = mile / 20; // 20 miles total length
-    return {
-        x: fromPoint.x + (toPoint.x - fromPoint.x) * percentage,
-        y: fromPoint.y + (toPoint.y - fromPoint.y) * percentage
-    };
+    const controlPoint1 = trackLayout.controlPoints?.[0] ? currentLayout.points[trackLayout.controlPoints[0]] : null;
+    const controlPoint2 = trackLayout.controlPoints?.[1] ? currentLayout.points[trackLayout.controlPoints[1]] : null;
+
+    const totalLength = 20;
+    const t = mile / totalLength;
+
+    if (controlPoint1 && controlPoint2) { // Cubic Bezier
+      const x = (1-t)**3 * fromPoint.x + 3*(1-t)**2 * t * controlPoint1.x + 3*(1-t) * t**2 * controlPoint2.x + t**3 * toPoint.x;
+      const y = (1-t)**3 * fromPoint.y + 3*(1-t)**2 * t * controlPoint1.y + 3*(1-t) * t**2 * controlPoint2.y + t**3 * toPoint.y;
+      return { x, y };
+    } else if (controlPoint1) { // Quadratic Bezier
+        const x = (1-t)**2 * fromPoint.x + 2*(1-t)*t * controlPoint1.x + t**2 * toPoint.x;
+        const y = (1-t)**2 * fromPoint.y + 2*(1-t)*t * controlPoint1.y + t**2 * toPoint.y;
+        return { x, y };
+    } else { // Linear
+      return {
+          x: fromPoint.x + (toPoint.x - fromPoint.x) * t,
+          y: fromPoint.y + (toPoint.y - fromPoint.y) * t,
+      };
+    }
   };
 
   useEffect(() => {
@@ -107,7 +114,7 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
             canvas.removeEventListener('wheel', handleWheel);
             canvas.removeEventListener('mousedown', handleMouseDown);
             canvas.removeEventListener('mouseup', handleMouseUp);
-            canvas.removeEventListener('mouseleave', handleMouseLeave);
+            canvas.removeEventListener('mouseleave', handleLeave);
             canvas.removeEventListener('mousemove', handleMouseMove);
         }
     };
@@ -136,26 +143,38 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
         ctx.translate(view.x, view.y);
         ctx.scale(view.zoom, view.zoom);
 
-        // --- Draw Tracks and Blocks ---
+        // --- Draw Tracks ---
         ctx.lineWidth = 3 / view.zoom;
+        ctx.strokeStyle = layout.config.trackColor;
         Object.values(layout.tracks).forEach(trackLayout => {
             const from = layout.points[trackLayout.points[0]];
             const to = layout.points[trackLayout.points[1]];
-            ctx.strokeStyle = layout.config.trackColor || trackColor;
+            const cp1 = trackLayout.controlPoints?.[0] ? layout.points[trackLayout.controlPoints[0]] : null;
+            const cp2 = trackLayout.controlPoints?.[1] ? layout.points[trackLayout.controlPoints[1]] : null;
+            
             ctx.beginPath();
             ctx.moveTo(from.x, from.y);
-            ctx.lineTo(to.x, to.y);
+            if (cp1 && cp2) {
+                ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, to.x, to.y);
+            } else if (cp1) {
+                ctx.quadraticCurveTo(cp1.x, cp1.y, to.x, to.y);
+            } else {
+                ctx.lineTo(to.x, to.y);
+            }
             ctx.stroke();
         });
 
-        // --- Draw Blocks and Stations ---
+        // --- Draw Stations / Points ---
         ctx.lineWidth = 1 / view.zoom;
         Object.values(layout.points).forEach(p => {
              if (p.label) {
-                ctx.fillStyle = stationColor;
+                ctx.fillStyle = p.isPlatform ? layout.config.platformColor : layout.config.stationColor;
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2 / view.zoom;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, 8 / view.zoom, 0, 2 * Math.PI);
+                ctx.arc(p.x, p.y, (p.isPlatform ? 10 : 6) / view.zoom, 0, 2 * Math.PI);
                 ctx.fill();
+                ctx.stroke();
                 
                 ctx.fillStyle = '#000';
                 ctx.font = `bold ${10 / view.zoom}px sans-serif`;
@@ -168,40 +187,42 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
 
         // --- Draw Trains ---
         trains.forEach(train => {
-            const point = getPointForPosition(train.track, train.position);
+            if (train.position < 0 || train.status === 'finished') return;
+            const point = getPointForPosition(train.track, train.position, layout);
             if(!point) return;
 
             // Train Body
-            ctx.fillStyle = trainColors[train.type] || '#fff';
+            const staticData = staticTrainData[train.id];
+            const trainColor = staticData ? (staticData.type === 'passenger' ? '#3b82f6' : '#6b7280') : '#fff';
+            
+            ctx.fillStyle = trainColor;
             ctx.beginPath();
             ctx.arc(point.x, point.y, 10 / view.zoom, 0, 2 * Math.PI);
             ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1.5 / view.zoom;
+            
+            // Status Ring
+            ctx.strokeStyle = statusColors[train.status] || '#fff';
+            ctx.lineWidth = 3 / view.zoom;
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 12 / view.zoom, 0, 2 * Math.PI);
             ctx.stroke();
             
             // Micro-details text
             ctx.fillStyle = '#fff';
-            ctx.font = `${12 / view.zoom}px sans-serif`;
+            ctx.font = `bold ${11 / view.zoom}px sans-serif`;
             ctx.textAlign = 'left';
-            const staticData = staticTrainData[train.id];
-
-            const textLines = [
-                `ID: ${staticData?.trainNo || train.id}`,
-                `Spd: ${train.speed.toFixed(0)} mph`,
-                `Pos: ${train.position.toFixed(2)} mi`,
-                `Status: ${train.status}`,
-            ];
             
-            textLines.forEach((line, index) => {
-                ctx.fillText(line, point.x + 15 / view.zoom, point.y + (5 / view.zoom) + (index * 14 / view.zoom));
-            });
-
-            // Status Indicator on train
-            ctx.fillStyle = statusColors[train.status] || '#fff';
-            ctx.beginPath();
-            ctx.arc(point.x, point.y, 4 / view.zoom, 0, 2 * Math.PI);
-            ctx.fill();
+            if (staticData) {
+                const textLines = [
+                    `${staticData.trainNo}`,
+                    `${train.speed.toFixed(0)} mph`,
+                    `${train.status}`,
+                ];
+                
+                textLines.forEach((line, index) => {
+                    ctx.fillText(line, point.x + 20 / view.zoom, point.y - (10 / view.zoom) + (index * 14 / view.zoom));
+                });
+            }
         });
         
         ctx.restore();
@@ -222,5 +243,5 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
 
   }, [trains, simulationTime, view, layout, caseId]);
 
-  return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-gray-800 rounded-lg" />;
+  return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-gray-900 rounded-lg" />;
 }

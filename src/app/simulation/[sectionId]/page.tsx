@@ -8,6 +8,7 @@ import { SidebarProvider, Sidebar, SidebarInset, SidebarContent, SidebarHeader, 
 import { CaseSelector } from "@/components/simulation/case-selector";
 import { Button } from "@/components/ui/button";
 import { Bot, Settings } from "lucide-react";
+import { AICopilot } from "@/components/simulation/ai-copilot";
 
 export default function SimulationPage({ params, searchParams }: { 
     params: { sectionId: string },
@@ -49,6 +50,7 @@ export default function SimulationPage({ params, searchParams }: {
                         <main className="flex-1 flex flex-col md:grid md:grid-cols-3 lg:grid-cols-4 gap-4 p-4 overflow-hidden">
                             <SimulationView section={section} caseId={caseId} />
                             <div className="md:col-span-1 lg:col-span-1 flex flex-col gap-4 h-full overflow-y-auto">
+                                <AICopilot />
                                 <RequestQueue sectionId={section.id}/>
                                 <EventLog events={events} />
                             </div>

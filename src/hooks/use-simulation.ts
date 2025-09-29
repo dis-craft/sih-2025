@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { simulationCases } from '@/lib/simulation-cases';
+import { allTrains as staticTrainData } from '@/lib/data';
 
 export type Train = {
     id: string;
-    type: 'express' | 'passenger' | 'freight' | 'emergency';
     track: string;
     position: number; // current mile
     speed: number;    // current speed in mph
@@ -15,10 +15,12 @@ export type Train = {
     startTime: number; // minutes past 7:00 PM
     platformHaltDuration: number; // minutes
     cargo: string | null;
-
+    path: string[]; // sequence of track IDs
+    
     // Dynamic state
     haltTimer: number; // minutes remaining for halt
     hasHaltedAtPlatform: boolean;
+    currentPathIndex: number;
 };
 
 // Simulation constants
@@ -35,7 +37,17 @@ export const useSimulation = (caseId: string) => {
     if (!simCase) throw new Error(`Simulation case ${caseId} not found.`);
     
     const initializeTrains = useCallback(() => {
-        return JSON.parse(JSON.stringify(simCase.initialTrains.map(t => ({...t, position: -1, speed: 0, status: 'on-time', haltTimer: 0, hasHaltedAtPlatform: false}))));
+        return JSON.parse(JSON.stringify(simCase.initialTrains.map(t => ({
+            ...t, 
+            id: t.id,
+            position: -1, 
+            speed: 0, 
+            status: 'on-time', 
+            haltTimer: 0, 
+            hasHaltedAtPlatform: false,
+            track: t.path[0],
+            currentPathIndex: 0,
+        }))));
     }, [simCase.initialTrains]);
 
     const [trains, setTrains] = useState<Train[]>(initializeTrains);
@@ -47,7 +59,6 @@ export const useSimulation = (caseId: string) => {
     simulationSpeedRef.current = simulationSpeed;
 
     useEffect(() => {
-        // Reset state when caseId changes
         setTrains(initializeTrains());
         setSimulationTime(0);
         setIsRunning(true);
@@ -55,7 +66,8 @@ export const useSimulation = (caseId: string) => {
 
 
     const advanceSimulation = useCallback(() => {
-        setSimulationTime(prevTime => prevTime + (TIME_STEP_S / 60) * simulationSpeedRef.current);
+        const timeDeltaMin = (TIME_STEP_S / 60) * simulationSpeedRef.current;
+        setSimulationTime(prevTime => prevTime + timeDeltaMin);
         
         setTrains(currentTrains => {
             const newTrains = [...currentTrains];
@@ -65,7 +77,6 @@ export const useSimulation = (caseId: string) => {
 
                 if (train.status === 'finished') continue;
                 
-                // --- Train Activation ---
                 if (train.position < 0 && simulationTime >= train.startTime) {
                     train.position = 0;
                     train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
@@ -73,19 +84,29 @@ export const useSimulation = (caseId: string) => {
                 }
                 if (train.position < 0) continue;
 
-                // --- Halt Logic ---
                 if (train.haltTimer > 0) {
-                    train.haltTimer -= (TIME_STEP_S / 60) * simulationSpeedRef.current;
+                    train.haltTimer -= timeDeltaMin;
                     if (train.haltTimer <= 0) {
                         train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
                         train.status = 'on-time';
+                        train.haltTimer = 0;
                     } else {
                         train.speed = 0;
-                        continue; // Skip movement if halted
+                        continue; 
                     }
                 }
                 
-                // --- Platform Halt ---
+                // --- Path switching logic ---
+                const currentTrackId = train.track;
+                const currentTrackLayout = simCase.layout.tracks[currentTrackId];
+                const trackEndMile = simCase.layout.points[currentTrackLayout.points[1]].mile;
+
+                if (train.position >= trackEndMile && train.currentPathIndex < train.path.length - 1) {
+                    train.currentPathIndex++;
+                    train.track = train.path[train.currentPathIndex];
+                    // Position might need adjustment if tracks have different start miles, but we assume 0 for simplicity
+                }
+
                 if (!train.hasHaltedAtPlatform && Math.abs(train.position - STATION_MILE) < 0.1) {
                     train.status = 'at-platform';
                     train.haltTimer = train.platformHaltDuration;
@@ -94,9 +115,10 @@ export const useSimulation = (caseId: string) => {
                     continue;
                 }
 
-                // --- Headway and Conflict Logic ---
                 let newSpeed = train.baseSpeed * (simCase.config.weatherFactor || 1);
                 let newStatus: Train['status'] = train.status === 'at-platform' || train.status === 'in-siding' ? train.status : 'on-time';
+                
+                // --- Headway and Conflict Logic ---
                 let leadTrainDistance = Infinity;
 
                 for (let j = 0; j < newTrains.length; j++) {
@@ -107,9 +129,9 @@ export const useSimulation = (caseId: string) => {
                     }
                 }
                 
-                const headwayDistance = (train.baseSpeed / 60) * HEADWAY_MIN; // distance covered in 5 mins
-                const stoppingDistance = headwayDistance * 0.5;
-                const slowingDistance = headwayDistance;
+                const headwayDistance = (train.baseSpeed / 60) * HEADWAY_MIN;
+                const stoppingDistance = headwayDistance * 1.0; 
+                const slowingDistance = headwayDistance * 2.0;
 
                 if (leadTrainDistance < stoppingDistance) {
                     newSpeed = 0;
@@ -119,28 +141,28 @@ export const useSimulation = (caseId: string) => {
                     newStatus = 'slowing';
                 }
 
-                // --- Siding Logic for Low Priority Trains ---
-                const nextPassengerTrain = newTrains.find(t => 
-                    t.priority === 'high' && 
+                const nextHighPriorityTrain = newTrains.find(t => 
+                    staticTrainData[t.id]?.priority < staticTrainData[train.id]?.priority &&
                     t.track === train.track && 
                     t.position < train.position
                 );
 
-                if (train.priority === 'low' && nextPassengerTrain) {
-                    const timeToConflict = ((train.position - nextPassengerTrain.position) / (nextPassengerTrain.speed - train.speed)) * 60;
+                if (train.priority === 'low' && nextHighPriorityTrain) {
+                    const timeToConflict = ((train.position - nextHighPriorityTrain.position) / (nextHighPriorityTrain.speed - train.speed)) * 60;
                      if (timeToConflict > 0 && timeToConflict < HEADWAY_MIN && Math.abs(train.position - SIDING_MILE) < 1) {
                         train.status = 'in-siding';
                         train.haltTimer = SIDING_HALT_DURATION_MIN;
                         newSpeed = 0;
-                        train.position = SIDING_MILE; // snap to siding
+                        train.position = SIDING_MILE;
                     }
                 }
 
                 train.speed = newSpeed;
-                train.status = newStatus;
+                if(newStatus !== train.status && train.status !== 'at-platform' && train.status !== 'in-siding') {
+                    train.status = newStatus;
+                }
                 
-                // --- Position Update ---
-                const distanceMoved = train.speed * (TIME_STEP_S / 3600); // speed is in mph
+                const distanceMoved = train.speed * (TIME_STEP_S / 3600);
                 train.position += distanceMoved * simulationSpeedRef.current;
 
                 if (train.position >= SECTION_LENGTH_MI) {
@@ -153,7 +175,7 @@ export const useSimulation = (caseId: string) => {
 
             return newTrains;
         });
-    }, [caseId, simCase.config.weatherFactor, simulationTime]);
+    }, [caseId, simCase, simulationTime]);
 
     useEffect(() => {
         if (!isRunning) return;
