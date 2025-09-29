@@ -1,138 +1,126 @@
 'use client';
-import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useRef, useEffect } from 'react';
 import { Section, Station } from '@/lib/schema';
 import { stations as allStations, tracks as allTracks, blocks as allBlocks, trains as allTrains } from '@/lib/data';
-import L from 'leaflet';
 
-// Fix for default icon path in Next.js
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
-const getBlockColor = (blockId: string) => {
-  const block = allBlocks[blockId];
-  if (!block) return '#888';
-  if (block.occupiedBy) return '#ef4444';
-  return '#22c55e';
+const trainColors: { [key: string]: string } = {
+  express: '#f97316', // orange-500
+  passenger: '#3b82f6', // blue-500
+  freight: '#6b7280', // gray-500
+  emergency: '#ef4444', // red-500
 };
 
-const getTrainIcon = (trainType: string) => {
-  const typeClass = `train-icon-${trainType}`;
-  return L.divIcon({
-    html: `<div class="w-3 h-3 rounded-full ${typeClass} border-2 border-white"></div>`,
-    className: '',
-    iconSize: [12, 12],
-    iconAnchor: [6, 6],
-  });
-};
-
-const interpolatePosition = (from: Station, to: Station, percentage: number) => {
-  return {
-    lat: from.lat + (to.lat - from.lat) * percentage,
-    lng: from.lng + (to.lng - from.lng) * percentage,
-  };
-};
+const blockColors = {
+  occupied: '#ef4444',
+  free: '#22c55e'
+}
 
 export function MapComponent({ section }: { section: Section }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
   const sectionStations: Station[] = section.stationList
     .map((id) => allStations[id])
     .filter(Boolean);
 
-  const sectionTracks = Object.values(allTracks).filter(
-    (t) => section.stationList.includes(t.fromStation) && section.stationList.includes(t.toStation)
-  );
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-  if (sectionStations.length === 0) return <div>No stations to display on map.</div>;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const parent = canvas.parentElement;
+    if(!parent) return;
 
-  const bounds = L.latLngBounds(sectionStations.map((s) => [s.lat, s.lng]));
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = parent.clientWidth * dpr;
+    canvas.height = parent.clientHeight * dpr;
+    ctx.scale(dpr, dpr);
+    const { width, height } = parent;
 
-  return (
-    <MapContainer
-      key={section.id} // ensures proper re-mount when section changes
-      bounds={bounds}
-      scrollWheelZoom={true}
-      className="w-full h-full"
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-      />
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
 
-      {sectionStations.map((station) => (
-        <Marker key={station.id} position={[station.lat, station.lng]}>
-          <Popup>
-            {station.name} ({station.id}) <br /> Platforms: {station.platforms}
-          </Popup>
-          <Tooltip direction="top" offset={[0, -10]} opacity={1} permanent>
-            {station.id}
-          </Tooltip>
-        </Marker>
-      ))}
+    // --- Layout Stations ---
+    const stationPositions: Map<string, { x: number; y: number }> = new Map();
+    const padding = 60;
+    const stationCount = sectionStations.length;
+    sectionStations.forEach((station, index) => {
+      const x = padding + (index / (stationCount - 1)) * (width - padding * 2);
+      const y = height / 2;
+      stationPositions.set(station.id, { x, y });
+    });
 
-      {sectionTracks.map((track) => {
-        const fromStation = allStations[track.fromStation];
-        const toStation = allStations[track.toStation];
-        if (!fromStation || !toStation) return null;
+    // --- Draw Tracks and Blocks ---
+    Object.values(allTracks).forEach(track => {
+      if (section.stationList.includes(track.fromStation) && section.stationList.includes(track.toStation)) {
+        const fromPos = stationPositions.get(track.fromStation);
+        const toPos = stationPositions.get(track.toStation);
+        if (!fromPos || !toPos) return;
 
-        const totalDistance = track.distance_m;
-        return track.blockIds.map((blockId) => {
-          const block = allBlocks[blockId];
-          if (!block) return null;
+        track.blockIds.forEach(blockId => {
+            const block = allBlocks[blockId];
+            if (!block) return;
+            
+            const startX = fromPos.x + (toPos.x - fromPos.x) * (block.start_km * 1000 / track.distance_m);
+            const endX = fromPos.x + (toPos.x - fromPos.x) * (block.end_km * 1000 / track.distance_m);
 
-          const startPos = interpolatePosition(fromStation, toStation, (block.start_km * 1000) / totalDistance);
-          const endPos = interpolatePosition(fromStation, toStation, (block.end_km * 1000) / totalDistance);
-
-          return (
-            <Polyline
-              key={block.id}
-              positions={[
-                [startPos.lat, startPos.lng],
-                [endPos.lat, endPos.lng],
-              ]}
-              color={getBlockColor(block.id)}
-              weight={4}
-            >
-              <Tooltip sticky>
-                {`Block: ${block.id}`}
-                {block.occupiedBy && ` | Train: ${allTrains[block.occupiedBy]?.trainNo}`}
-              </Tooltip>
-            </Polyline>
-          );
+            ctx.strokeStyle = block.occupiedBy ? blockColors.occupied : blockColors.free;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(startX, fromPos.y);
+            ctx.lineTo(endX, fromPos.y);
+            ctx.stroke();
         });
-      })}
+      }
+    });
 
-      {Object.values(allTrains).map((train) => {
-        if (train.position.type === 'station' || !train.position.offset_km) return null;
+    // --- Draw Stations ---
+    stationPositions.forEach((pos, stationId) => {
+      const station = allStations[stationId];
+      ctx.fillStyle = '#94a3b8'; // slate-400
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 8, 0, 2 * Math.PI);
+      ctx.fill();
 
-        const block = allBlocks[train.position.id];
-        if (!block) return null;
+      ctx.fillStyle = '#e2e8f0'; // slate-200
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(station.id, pos.x, pos.y + 25);
+    });
 
-        const track = allTracks[block.trackId];
-        const fromStation = allStations[track.fromStation];
-        const toStation = allStations[track.toStation];
-        if (!fromStation || !toStation) return null;
+    // --- Draw Trains ---
+     Object.values(allTrains).forEach(train => {
+        if (train.position.type === 'block' && train.position.offset_km) {
+            const block = allBlocks[train.position.id];
+            if (!block) return;
 
-        const percentage = ((block.start_km + train.position.offset_km) * 1000) / track.distance_m;
-        const pos = interpolatePosition(fromStation, toStation, percentage);
+            const track = allTracks[block.trackId];
+            if (!track || !section.stationList.includes(track.fromStation)) return;
 
-        return (
-          <Marker key={train.id} position={[pos.lat, pos.lng]} icon={getTrainIcon(train.type)}>
-            <Tooltip direction="right" offset={[10, 0]}>
-              <b>
-                {train.trainNo} ({train.type})
-              </b>
-              <br />
-              Status: {train.status}
-              <br />
-              Speed: {train.currentSpeed_kmph} km/h
-            </Tooltip>
-          </Marker>
-        );
-      })}
-    </MapContainer>
-  );
+            const fromPos = stationPositions.get(track.fromStation);
+            const toPos = stationPositions.get(track.toStation);
+
+            if(!fromPos || !toPos) return;
+            
+            const percentage = ((block.start_km + train.position.offset_km) * 1000) / track.distance_m;
+            const x = fromPos.x + (toPos.x - fromPos.x) * percentage;
+            const y = fromPos.y - 15; // Offset trains above track
+
+            ctx.fillStyle = trainColors[train.type] || '#fff';
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(train.trainNo, x, y - 10);
+        }
+     });
+
+
+  }, [section, sectionStations]);
+
+  return <canvas ref={canvasRef} className="w-full h-full" />;
 }
