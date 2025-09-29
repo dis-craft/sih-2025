@@ -16,6 +16,12 @@ export function SimulationView({ section, caseId }: { section: Section, caseId: 
     notFound();
   }
 
+  const metrics = {
+    throughput: sim.metrics.throughput,
+    avgDelay: sim.metrics.avgDelay,
+    efficiency: sim.metrics.efficiency,
+  };
+
   return (
     <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -28,9 +34,9 @@ export function SimulationView({ section, caseId }: { section: Section, caseId: 
           onStep={sim.step}
           onSpeedChange={sim.setSimulationSpeed}
         />
-        <KPIPanel metrics={selectedCase.metrics} />
+        <KPIPanel metrics={metrics} />
       </div>
-      <div className="flex-1 min-h-[300px] md:min-h-0">
+      <div className="flex-1 min-h-[300px] md:min-h-0 bg-card rounded-lg border">
         <MapComponent section={section} caseId={caseId} />
       </div>
     </div>

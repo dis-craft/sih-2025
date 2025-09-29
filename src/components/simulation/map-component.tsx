@@ -25,7 +25,7 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
 
   const simCase = simulationCases[caseId];
   if (!simCase) {
-    return <div className="flex items-center justify-center h-full bg-gray-800 rounded-lg text-white">Invalid Simulation Case ID</div>;
+    return <div className="flex items-center justify-center h-full bg-card rounded-lg text-foreground">Invalid Simulation Case ID</div>;
   }
   const { layout } = simCase;
 
@@ -145,8 +145,9 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
         ctx.scale(view.zoom, view.zoom);
 
         // --- Draw Tracks ---
-        ctx.lineWidth = 3 / view.zoom;
+        ctx.lineWidth = 4 / view.zoom;
         ctx.strokeStyle = layout.config.trackColor;
+        ctx.globalAlpha = 0.8;
         Object.values(layout.tracks).forEach(trackLayout => {
             const from = layout.points[trackLayout.points[0]];
             const to = layout.points[trackLayout.points[1]];
@@ -164,24 +165,22 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
             }
             ctx.stroke();
         });
+        ctx.globalAlpha = 1;
+
 
         // --- Draw Stations / Points ---
-        ctx.lineWidth = 1 / view.zoom;
         Object.values(layout.points).forEach(p => {
              if (p.label) {
                 ctx.fillStyle = p.isPlatform ? layout.config.platformColor : layout.config.stationColor;
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 2 / view.zoom;
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, (p.isPlatform ? 10 : 6) / view.zoom, 0, 2 * Math.PI);
+                ctx.arc(p.x, p.y, (p.isPlatform ? 10 : 7) / view.zoom, 0, 2 * Math.PI);
                 ctx.fill();
-                ctx.stroke();
                 
-                ctx.fillStyle = '#000';
-                ctx.font = `bold ${10 / view.zoom}px sans-serif`;
+                ctx.fillStyle = '#fff';
+                ctx.font = `bold ${12 / view.zoom}px sans-serif`;
                 ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(p.label, p.x, p.y);
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(p.label, p.x, p.y - (15 / view.zoom));
             }
         });
 
@@ -198,19 +197,19 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
             
             ctx.fillStyle = trainColor;
             ctx.beginPath();
-            ctx.arc(point.x, point.y, 10 / view.zoom, 0, 2 * Math.PI);
+            ctx.arc(point.x, point.y, 8 / view.zoom, 0, 2 * Math.PI);
             ctx.fill();
             
             // Status Ring
             ctx.strokeStyle = statusColors[train.status] || '#fff';
-            ctx.lineWidth = 3 / view.zoom;
+            ctx.lineWidth = 2.5 / view.zoom;
             ctx.beginPath();
-            ctx.arc(point.x, point.y, 12 / view.zoom, 0, 2 * Math.PI);
+            ctx.arc(point.x, point.y, 11 / view.zoom, 0, 2 * Math.PI);
             ctx.stroke();
             
             // Micro-details text
             ctx.fillStyle = '#fff';
-            ctx.font = `bold ${11 / view.zoom}px sans-serif`;
+            ctx.font = `bold ${10 / view.zoom}px sans-serif`;
             ctx.textAlign = 'left';
             
             if (staticData) {
@@ -221,7 +220,7 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
                 ];
                 
                 textLines.forEach((line, index) => {
-                    ctx.fillText(line, point.x + 20 / view.zoom, point.y - (10 / view.zoom) + (index * 14 / view.zoom));
+                    ctx.fillText(line, point.x + 18 / view.zoom, point.y - (8 / view.zoom) + (index * 12 / view.zoom));
                 });
             }
         });
@@ -244,7 +243,7 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
 
   }, [trains, simulationTime, view, layout, caseId]);
 
-  return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-gray-900 rounded-lg" />;
+  return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-card rounded-lg" />;
 }
 
     

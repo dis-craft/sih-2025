@@ -21,7 +21,15 @@ export type Train = {
     haltTimer: number; // minutes remaining for halt
     hasHaltedAtPlatform: boolean;
     currentPathIndex: number;
+    totalDelay: number;
+    completionTime: number | null;
 };
+
+export type SimulationMetrics = {
+    throughput: number;
+    avgDelay: number;
+    efficiency: number;
+}
 
 // Simulation constants
 const TIME_STEP_S = 10; // Each tick is 10 seconds of simulation time
@@ -47,6 +55,8 @@ export const useSimulation = (caseId: string) => {
             hasHaltedAtPlatform: false,
             track: t.path[0],
             currentPathIndex: 0,
+            totalDelay: 0,
+            completionTime: null,
         }))));
     }, [simCase.initialTrains]);
 
@@ -54,6 +64,7 @@ export const useSimulation = (caseId: string) => {
     const [isRunning, setIsRunning] = useState(true);
     const [simulationSpeed, setSimulationSpeed] = useState(1);
     const [simulationTime, setSimulationTime] = useState(0); // in minutes
+    const [metrics, setMetrics] = useState<SimulationMetrics>({ throughput: 0, avgDelay: 0, efficiency: 0 });
     
     const simulationSpeedRef = useRef(simulationSpeed);
     simulationSpeedRef.current = simulationSpeed;
@@ -62,12 +73,14 @@ export const useSimulation = (caseId: string) => {
         setTrains(initializeTrains());
         setSimulationTime(0);
         setIsRunning(true);
+        setMetrics({ throughput: 0, avgDelay: 0, efficiency: 0 });
     }, [caseId, initializeTrains]);
 
 
     const advanceSimulation = useCallback(() => {
         const timeDeltaMin = (TIME_STEP_S / 60) * simulationSpeedRef.current;
-        setSimulationTime(prevTime => prevTime + timeDeltaMin);
+        const newSimTime = simulationTime + timeDeltaMin;
+        setSimulationTime(newSimTime);
         
         setTrains(currentTrains => {
             const newTrains = [...currentTrains];
@@ -77,7 +90,10 @@ export const useSimulation = (caseId: string) => {
 
                 if (train.status === 'finished') continue;
                 
-                if (train.position < 0 && simulationTime >= train.startTime) {
+                // Introduce delay if needed
+                const actualStartTime = train.startTime + (simCase.initialTrains.find(t=>t.id === train.id)?.delay || 0);
+
+                if (train.position < 0 && newSimTime >= actualStartTime) {
                     train.position = 0;
                     train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
                     train.status = 'on-time';
@@ -92,6 +108,7 @@ export const useSimulation = (caseId: string) => {
                         train.haltTimer = 0;
                     } else {
                         train.speed = 0;
+                        train.totalDelay += timeDeltaMin;
                         continue; 
                     }
                 }
@@ -99,15 +116,19 @@ export const useSimulation = (caseId: string) => {
                 // --- Path switching logic ---
                 const currentTrackId = train.track;
                 const currentTrackLayout = simCase.layout.tracks[currentTrackId];
-                const trackEndMile = simCase.layout.points[currentTrackLayout.points[1]].mile;
-
-                if (train.position >= trackEndMile && train.currentPathIndex < train.path.length - 1) {
-                    train.currentPathIndex++;
-                    train.track = train.path[train.currentPathIndex];
-                    // Position might need adjustment if tracks have different start miles, but we assume 0 for simplicity
+                if (currentTrackLayout) {
+                    const trackEndMile = simCase.layout.points[currentTrackLayout.points[1]]?.mile;
+    
+                    if (trackEndMile !== undefined && train.position >= trackEndMile && train.currentPathIndex < train.path.length - 1) {
+                        train.currentPathIndex++;
+                        train.track = train.path[train.currentPathIndex];
+                        // Position might need adjustment if tracks have different start miles, but we assume start at the end of the previous one
+                        train.position = simCase.layout.points[simCase.layout.tracks[train.track]?.points[0]]?.mile || train.position;
+                    }
                 }
 
-                if (!train.hasHaltedAtPlatform && Math.abs(train.position - STATION_MILE) < 0.1) {
+
+                if (!train.hasHaltedAtPlatform && Math.abs(train.position - STATION_MILE) < 0.2) {
                     train.status = 'at-platform';
                     train.haltTimer = train.platformHaltDuration;
                     train.hasHaltedAtPlatform = true;
@@ -130,8 +151,8 @@ export const useSimulation = (caseId: string) => {
                 }
                 
                 const headwayDistance = (train.baseSpeed / 60) * HEADWAY_MIN;
-                const stoppingDistance = headwayDistance * 1.0; 
-                const slowingDistance = headwayDistance * 2.0;
+                const stoppingDistance = headwayDistance * 1.5; 
+                const slowingDistance = headwayDistance * 2.5;
 
                 if (leadTrainDistance < stoppingDistance) {
                     newSpeed = 0;
@@ -141,20 +162,25 @@ export const useSimulation = (caseId: string) => {
                     newStatus = 'slowing';
                 }
 
-                const nextHighPriorityTrain = newTrains.find(t => 
-                    staticTrainData[t.id]?.priority < staticTrainData[train.id]?.priority &&
-                    t.track === train.track && 
-                    t.position < train.position
+                // Siding logic for low priority trains
+                const highPriorityConflict = newTrains.find(t => 
+                    t.priority === 'high' && 
+                    train.priority === 'low' &&
+                    t.track === train.track &&
+                    t.position < train.position + slowingDistance &&
+                    t.position > train.position - stoppingDistance
                 );
 
-                if (train.priority === 'low' && nextHighPriorityTrain) {
-                    const timeToConflict = ((train.position - nextHighPriorityTrain.position) / (nextHighPriorityTrain.speed - train.speed)) * 60;
-                     if (timeToConflict > 0 && timeToConflict < HEADWAY_MIN && Math.abs(train.position - SIDING_MILE) < 1) {
-                        train.status = 'in-siding';
-                        train.haltTimer = SIDING_HALT_DURATION_MIN;
-                        newSpeed = 0;
-                        train.position = SIDING_MILE;
-                    }
+                if (highPriorityConflict && Math.abs(train.position - SIDING_MILE) < 1 && train.status !== 'in-siding') {
+                    const extraHalt = simCase.initialTrains.find(t=>t.id === train.id)?.sidingHaltDuration || SIDING_HALT_DURATION_MIN;
+                    train.status = 'in-siding';
+                    train.haltTimer = extraHalt;
+                    newSpeed = 0;
+                    train.position = SIDING_MILE;
+                }
+
+                if (newStatus === 'stopped' || newStatus === 'slowing') {
+                    train.totalDelay += timeDeltaMin;
                 }
 
                 train.speed = newSpeed;
@@ -168,6 +194,7 @@ export const useSimulation = (caseId: string) => {
                 if (train.position >= SECTION_LENGTH_MI) {
                     train.status = 'finished';
                     train.speed = 0;
+                    train.completionTime = newSimTime;
                 }
 
                 newTrains[i] = train;
@@ -175,7 +202,47 @@ export const useSimulation = (caseId: string) => {
 
             return newTrains;
         });
-    }, [caseId, simCase, simulationTime]);
+
+        // --- Calculate metrics ---
+        const finishedTrains = trains.filter(t => t.status === 'finished');
+        const activeTrains = trains.filter(t => t.position > -1 && t.status !== 'finished');
+        
+        const totalDelay = activeTrains.reduce((acc, t) => acc + t.totalDelay, 0) + finishedTrains.reduce((acc, t) => acc + t.totalDelay, 0);
+        const avgDelay = (activeTrains.length + finishedTrains.length) > 0 ? totalDelay / (activeTrains.length + finishedTrains.length) : 0;
+        
+        // Throughput: trains finished per hour
+        const firstStartTime = Math.min(...simCase.initialTrains.map(t => t.startTime));
+        const timeWindowHours = Math.max(newSimTime - firstStartTime, 1) / 60;
+        const throughput = finishedTrains.length / timeWindowHours;
+
+        // Efficiency: Actual vs theoretical minimum time
+        const idealTime = trains.reduce((acc, train) => {
+            if (train.position > -1) {
+                const idealCrossTime = (SECTION_LENGTH_MI / train.baseSpeed) * 60 + train.platformHaltDuration;
+                return acc + idealCrossTime;
+            }
+            return acc;
+        }, 0);
+        
+        const actualTime = trains.reduce((acc, train) => {
+            if (train.position > -1 && train.status !== 'finished') {
+                return acc + (newSimTime - train.startTime);
+            }
+            if (train.completionTime) {
+                return acc + (train.completionTime - train.startTime);
+            }
+            return acc;
+        }, 0);
+        
+        const efficiency = (idealTime > 0 && actualTime > 0) ? idealTime / actualTime : 0;
+
+        setMetrics({
+            throughput: parseFloat(throughput.toFixed(1)),
+            avgDelay: parseFloat(avgDelay.toFixed(1)),
+            efficiency: parseFloat(efficiency.toFixed(2)),
+        });
+
+    }, [caseId, simCase, simulationTime, trains]);
 
     useEffect(() => {
         if (!isRunning) return;
@@ -189,6 +256,7 @@ export const useSimulation = (caseId: string) => {
         setIsRunning(false);
         setTrains(initializeTrains());
         setSimulationTime(0);
+        setMetrics({ throughput: 0, avgDelay: 0, efficiency: 0 });
     }, [initializeTrains]);
 
     const step = useCallback(() => {
@@ -197,5 +265,5 @@ export const useSimulation = (caseId: string) => {
         }
     }, [isRunning, advanceSimulation]);
 
-    return { trains, isRunning, setIsRunning, reset, step, simulationSpeed, setSimulationSpeed, simulationTime };
+    return { trains, isRunning, setIsRunning, reset, step, simulationSpeed, setSimulationSpeed, simulationTime, metrics };
 };
