@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { simulationCases } from '@/lib/simulation-cases';
 
 type TrainStatus = 'on-time' | 'delayed' | 'stopped' | 'slowing' | 'conflict';
 
@@ -12,21 +13,23 @@ export type Train = {
     status: TrainStatus;
 };
 
-const initialTrains: Train[] = [
-    { id: 'T12613', type: 'express', path: 'approach1', progress: 0.1, speed: 0.015, maxSpeed: 0.015, status: 'on-time' },
-    { id: 'T16216', type: 'passenger', path: 'approach2', progress: 0.3, speed: 0.01, maxSpeed: 0.01, status: 'on-time' },
-    { id: 'T20660', type: 'express', path: 'platform3', progress: 0.5, speed: 0.015, maxSpeed: 0.015, status: 'on-time' },
-    { id: 'F5678', type: 'freight', path: 'platform4', progress: 0.8, speed: 0.007, maxSpeed: 0.007, status: 'on-time' },
-    { id: 'E901', type: 'emergency', path: 'approach-ext', progress: 0.2, speed: 0.02, maxSpeed: 0.02, status: 'on-time' },
-];
+export const useSimulation = (caseId: string) => {
+    const simCase = simulationCases[caseId];
+    const initialTrains = simCase ? simCase.initialTrains : [];
+    const layout = simCase ? simCase.layout : { paths: {}, points: {} };
 
-
-export const useSimulation = () => {
     const [trains, setTrains] = useState<Train[]>(() => JSON.parse(JSON.stringify(initialTrains)));
     const [isRunning, setIsRunning] = useState(true);
     const [simulationSpeed, setSimulationSpeed] = useState(1);
     const simulationSpeedRef = useRef(simulationSpeed);
     simulationSpeedRef.current = simulationSpeed;
+
+    useEffect(() => {
+        // Reset state when caseId changes
+        setTrains(JSON.parse(JSON.stringify(initialTrains)));
+        setIsRunning(true);
+    }, [caseId, initialTrains]);
+
 
     const advanceSimulation = useCallback(() => {
         setTrains(currentTrains => {
@@ -37,28 +40,20 @@ export const useSimulation = () => {
                 let nextPath = train.path;
                 let newProgress = train.progress + (train.speed * simulationSpeedRef.current);
 
-                // --- Path Transition Logic ---
                 if (newProgress >= 1) {
-                    newProgress = newProgress % 1; // Reset progress for the new path, carry over surplus
-                    switch (train.path) {
-                        case 'approach-ext': nextPath = 'approach1'; break;
-                        case 'approach1': nextPath = 'platform1'; break;
-                        case 'approach2': nextPath = 'platform4'; break; // Changed to p4 for variety
-                        case 'platform1': nextPath = 'exit1'; break;
-                        case 'platform2': nextPath = 'exit1'; break;
-                        case 'platform3': nextPath = 'exit2'; break;
-                        case 'platform4': nextPath = 'exit2'; break;
-                        case 'exit1': nextPath = 'exit-ext'; break;
-                        case 'exit2': nextPath = 'exit-ext'; break;
-                        case 'exit-ext': // Loop back to start for continuous simulation
-                            const entryPaths = ['approach-ext', 'approach2'];
-                            nextPath = entryPaths[Math.floor(Math.random() * entryPaths.length)];
-                            break;
-                        default: // Crossovers etc.
-                             if (train.path.startsWith('crossover')) {
-                                nextPath = `platform${train.path.slice(-1)}`;
-                             }
-                             break;
+                    newProgress = newProgress % 1; 
+                    const currentPathConnections = layout.paths[train.path];
+                    const destinationNode = currentPathConnections ? currentPathConnections[1] : null;
+                    
+                    const possibleNextPaths = Object.entries(layout.paths)
+                        .filter(([pathName, nodes]) => nodes[0] === destinationNode)
+                        .map(([pathName]) => pathName);
+
+                    if (possibleNextPaths.length > 0) {
+                        nextPath = possibleNextPaths[Math.floor(Math.random() * possibleNextPaths.length)];
+                    } else {
+                        const entryPaths = Object.keys(layout.paths);
+                        nextPath = entryPaths[Math.floor(Math.random() * entryPaths.length)];
                     }
                 }
 
@@ -71,25 +66,22 @@ export const useSimulation = () => {
                     if (i === j) continue;
                     const otherTrain = newTrains[j];
                     
-                    // Check for trains on the same path
                     if (otherTrain.path === train.path && otherTrain.progress > train.progress) {
                         leadTrainDistance = Math.min(leadTrainDistance, otherTrain.progress - train.progress);
                     }
-                    // Check for trains on a subsequent path that this train will enter
                     if(otherTrain.path === nextPath && train.path !== nextPath){
                         const distanceToPathEnd = 1 - train.progress;
                         leadTrainDistance = Math.min(leadTrainDistance, distanceToPathEnd + otherTrain.progress);
                     }
                 }
                 
-                const stoppingDistance = 0.2; // Stop if train is within 20% of track length (Increased)
-                const slowingDistance = 0.4;  // Start slowing down if train is within 40% of track length (Increased)
+                const stoppingDistance = 0.4;
+                const slowingDistance = 0.8;
 
                 if (leadTrainDistance < stoppingDistance) {
                     newSpeed = 0;
                     newStatus = 'stopped';
                 } else if (leadTrainDistance < slowingDistance) {
-                    // Smooth speed reduction based on proximity
                     newSpeed = train.maxSpeed * ((leadTrainDistance - stoppingDistance) / (slowingDistance - stoppingDistance));
                     newStatus = 'slowing';
                 } else {
@@ -97,17 +89,15 @@ export const useSimulation = () => {
                     newStatus = 'on-time';
                 }
                 
-                // Ensure speed is not negative
                 newSpeed = Math.max(0, newSpeed);
 
 
-                // Update train properties
                 newTrains[i] = { ...train, path: nextPath, progress: newProgress, speed: newSpeed, status: newStatus };
             }
 
             return newTrains;
         });
-    }, []);
+    }, [layout]);
 
     useEffect(() => {
         if (!isRunning) return;
@@ -120,7 +110,7 @@ export const useSimulation = () => {
     const reset = useCallback(() => {
         setIsRunning(false);
         setTrains(JSON.parse(JSON.stringify(initialTrains)));
-    }, []);
+    }, [initialTrains]);
 
     const step = useCallback(() => {
         if (!isRunning) {

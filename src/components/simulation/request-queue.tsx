@@ -18,7 +18,7 @@ import {
   } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { requests as allRequests, trains } from '@/lib/data';
+import { requests as allRequests, allTrains as trains } from '@/lib/data';
 import { Request } from '@/lib/schema';
 import { Check, X, Hand, AlertTriangle } from 'lucide-react';
 import {

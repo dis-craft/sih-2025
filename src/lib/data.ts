@@ -55,7 +55,7 @@ export const blocks: Record<string, Block> = {
     "Y02": { id: "Y02", trackId: "TRK04", start_km: 2.5, end_km: 5, occupiedBy: null, signalId: "SY02" },
 };
 
-export const trains: Record<string, Train> = {
+export const allTrains: Record<string, Train> = {
     "T12613": { id: "T12613", trainNo: "12613", type: "express", priority: 2, length_m: 450, maxSpeed_kmph: 110, acceleration_mps2: 0.4, braking_mps2: 0.8, currentState: "in_section", position: { type: "block", id: "B02", offset_km: 2.1 }, eta_next: new Date(Date.now() + 5 * 60 * 1000).toISOString(), origin: "SBC", destination: "MYS", status: "on_time", currentSpeed_kmph: 85 },
     "T16216": { id: "T16216", trainNo: "16216", type: "passenger", priority: 4, length_m: 300, maxSpeed_kmph: 90, acceleration_mps2: 0.6, braking_mps2: 1.0, currentState: "in_section", position: { type: "block", id: "B08", offset_km: 1.5 }, eta_next: new Date(Date.now() + 12 * 60 * 1000).toISOString(), origin: "SBC", destination: "MYS", status: "delayed", status_details: "+15min", currentSpeed_kmph: 70 },
     "T20660": { id: "T20660", trainNo: "20660", type: "express", priority: 2, length_m: 400, maxSpeed_kmph: 120, acceleration_mps2: 0.5, braking_mps2: 0.9, currentState: "in_section", position: { type: "block", id: "B11", offset_km: 10.3 }, eta_next: new Date(Date.now() + 8 * 60 * 1000).toISOString(), origin: "SBC", destination: "MYS", status: "on_time", currentSpeed_kmph: 105 },

@@ -1,8 +1,9 @@
 'use client';
 import { useRef, useEffect, useState } from 'react';
 import type { Section } from '@/lib/schema';
-import { useSimulation, Train } from '@/hooks/use-simulation';
-import { stations as allStations, trains as allTrains } from '@/lib/data';
+import { useSimulation } from '@/hooks/use-simulation';
+import { simulationCases } from '@/lib/simulation-cases';
+import { allTrains } from '@/lib/data';
 
 const trackColor = '#4b5563'; // gray-600
 const stationColor = '#e5e7eb'; // gray-200
@@ -13,7 +14,7 @@ const trainColors: { [key: string]: string } = {
   emergency: '#ef4444', // red-500
 };
 
-const statusColors: { [key in Train['status']]: string } = {
+const statusColors: { [key in ReturnType<typeof useSimulation>['trains'][0]['status']]: string } = {
     'on-time': '#22c55e', // green-500
     'slowing': '#facc15', // yellow-400
     'stopped': '#ef4444', // red-500
@@ -21,67 +22,27 @@ const statusColors: { [key in Train['status']]: string } = {
     'conflict': '#dc2626', // red-600
 }
 
-
-// --- Manually defined realistic junction layout ---
-// This represents a more complex station area with approaches, platforms, and exits.
-const layout = {
-    points: {
-        // Approach
-        'entry-ext': { x: 50, y: 300 },
-        'entry1': { x: 200, y: 150 },
-        'entry2': { x: 200, y: 450 },
-        // Station Platforms Start
-        'p1-start': { x: 350, y: 150, label: 'P1' },
-        'p2-start': { x: 350, y: 250, label: 'P2' },
-        'p3-start': { x: 350, y: 350, label: 'P3' },
-        'p4-start': { x: 350, y: 450, label: 'P4' },
-        // Station Platforms End
-        'p1-end': { x: 850, y: 150 },
-        'p2-end': { x: 850, y: 250 },
-        'p3-end': { x: 850, y: 350 },
-        'p4-end': { x: 850, y: 450 },
-        // Exits
-        'exit1': { x: 1000, y: 200 },
-        'exit2': { x: 1000, y: 400 },
-        'exit-ext': { x: 1150, y: 300 },
-    },
-    paths: {
-        'approach-ext': ['entry-ext', 'entry1'],
-        'approach1': ['entry1', 'p1-start'],
-        'approach2': ['entry2', 'p4-start'],
-        'crossover1': ['entry1', 'p2-start'],
-        'crossover2': ['entry2', 'p3-start'],
-        'platform1': ['p1-start', 'p1-end'],
-        'platform2': ['p2-start', 'p2-end'],
-        'platform3': ['p3-start', 'p3-end'],
-        'platform4': ['p4-start', 'p4-end'],
-        'crossover3': ['p1-end', 'exit1'],
-        'crossover4': ['p2-end', 'exit1'],
-        'crossover5': ['p3-end', 'exit2'],
-        'crossover6': ['p4-end', 'exit2'],
-        'exit1': ['exit1', 'exit-ext'],
-        'exit2': ['exit2', 'exit-ext'],
-    }
-};
-
-const getPointOnPath = (pathName: string, t: number) => {
-    const path = layout.paths[pathName as keyof typeof layout.paths];
-    if (!path) return { x: 0, y: 0 };
-    const from = layout.points[path[0] as keyof typeof layout.points];
-    const to = layout.points[path[1] as keyof typeof layout.points];
-    if (!from || !to) return {x: 0, y: 0};
-    
-    // Linear interpolation
-    return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
-};
-
-
-export function MapComponent({ section }: { section: Section }) {
+export function MapComponent({ section, caseId }: { section: Section, caseId: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { trains } = useSimulation();
+  const { trains } = useSimulation(caseId);
   const [view, setView] = useState({ x: 0, y: 0, zoom: 0.8 });
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 });
+
+  const simCase = simulationCases[caseId];
+  if (!simCase) {
+    return <div className="flex items-center justify-center h-full bg-gray-800 rounded-lg text-white">Invalid Simulation Case ID</div>;
+  }
+  const { layout } = simCase;
+
+  const getPointOnPath = (pathName: string, t: number) => {
+      const path = layout.paths[pathName as keyof typeof layout.paths];
+      if (!path) return { x: 0, y: 0 };
+      const from = layout.points[path[0] as keyof typeof layout.points];
+      const to = layout.points[path[1] as keyof typeof layout.points];
+      if (!from || !to) return {x: 0, y: 0};
+      return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -135,11 +96,13 @@ export function MapComponent({ section }: { section: Section }) {
     canvas.addEventListener('mousemove', handleMouseMove);
 
     return () => {
-        canvas.removeEventListener('wheel', handleWheel);
-        canvas.removeEventListener('mousedown', handleMouseDown);
-        canvas.removeEventListener('mouseup', handleMouseUp);
-        canvas.removeEventListener('mouseleave', handleMouseLeave);
-        canvas.removeEventListener('mousemove', handleMouseMove);
+        if (canvas) {
+            canvas.removeEventListener('wheel', handleWheel);
+            canvas.removeEventListener('mousedown', handleMouseDown);
+            canvas.removeEventListener('mouseup', handleMouseUp);
+            canvas.removeEventListener('mouseleave', handleMouseLeave);
+            canvas.removeEventListener('mousemove', handleMouseMove);
+        }
     };
 
   }, [isPanning, lastPanPoint, view.zoom]);
@@ -188,7 +151,6 @@ export function MapComponent({ section }: { section: Section }) {
             ctx.fill();
             ctx.stroke();
             
-            // Draw Label for platforms
             if (p.label) {
                 ctx.fillStyle = '#000';
                 ctx.font = `bold ${10 / view.zoom}px sans-serif`;
@@ -244,7 +206,7 @@ export function MapComponent({ section }: { section: Section }) {
         window.cancelAnimationFrame(animationFrameId);
     };
 
-  }, [trains, view]);
+  }, [trains, view, layout]);
 
   return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-gray-800 rounded-lg" />;
 }

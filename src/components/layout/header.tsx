@@ -11,72 +11,37 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet';
 import Link from 'next/link';
+import { useSidebar, SidebarTrigger } from '../ui/sidebar';
 
 const navItems = [
-    { href: '/simulation/ksr-central', label: 'KSR Central' },
-    { href: '/simulation/sbc-mys', label: 'SBC-MYS' },
+    { href: '/simulation/sbc-mys?case=case1', label: 'SBC-MYS' },
 ];
 
 export function Header({ sectionName }: { sectionName: string }) {
+  const { isMobile } = useSidebar();
+  
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
-      <nav className="hidden flex-col gap-6 text-lg font-medium md:flex md:flex-row md:items-center md:gap-5 md:text-sm lg:gap-6">
-        <Link
-          href="#"
-          className="flex items-center gap-2 text-lg font-semibold md:text-base"
-        >
-          <Train className="h-6 w-6 text-primary" />
-          <span className="sr-only">RailSectionSim</span>
-        </Link>
-        {navItems.map((item) => (
-            <Link
-            key={item.href}
-            href={item.href}
-            className={`transition-colors hover:text-foreground ${item.label === sectionName ? 'text-foreground' : 'text-muted-foreground'}`}
-            >
-            {item.label}
-            </Link>
-        ))}
-
-      </nav>
-      <Sheet>
-        <SheetTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            className="shrink-0 md:hidden"
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
+      <div className="flex items-center gap-2">
+        {isMobile ? (
+          <SidebarTrigger />
+        ) : (
+          <Link
+            href="#"
+            className="flex items-center gap-2 text-lg font-semibold md:text-base"
           >
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">Toggle navigation menu</span>
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left">
-          <nav className="grid gap-6 text-lg font-medium">
-            <Link
-              href="#"
-              className="flex items-center gap-2 text-lg font-semibold"
-            >
-              <Train className="h-6 w-6 text-primary" />
-              <span className="sr-only">RailSectionSim</span>
-            </Link>
-            {navItems.map((item) => (
-            <Link
-                key={item.href}
-                href={item.href}
-                className={`transition-colors hover:text-foreground ${item.label === sectionName ? 'text-foreground' : 'text-muted-foreground'}`}
-            >
-                {item.label}
-            </Link>
-            ))}
-          </nav>
-        </SheetContent>
-      </Sheet>
+            <Train className="h-6 w-6 text-primary" />
+            <span className="sr-only">RailOptix</span>
+          </Link>
+        )}
+         <h1 className="text-lg font-semibold md:text-xl">RailOptix</h1>
+      </div>
+      
       <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
-        <div className='ml-auto'>
-            <h1 className="text-lg font-semibold md:text-xl">{sectionName}</h1>
-            <p className="text-sm text-muted-foreground">Section Controller Dashboard</p>
+        <div className='ml-auto text-right'>
+            <h2 className="text-md font-semibold md:text-lg">{sectionName}</h2>
+            <p className="text-xs text-muted-foreground">Section Controller Dashboard</p>
         </div>
 
         <DropdownMenu>
