@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { AppLayout } from '@/components/layout/app-layout';
 import { Toaster } from '@/components/ui/toaster';
+import { Inter } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
-  title: 'RailOptix',
-  description: 'Train management simplified.',
+  title: 'RailSectionSim',
+  description: 'AI-Powered Section Throughput Simulator & Section-Controller Dashboard',
 };
 
 export default function RootLayout({
@@ -16,15 +18,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossOrigin=""/>
       </head>
-      <body className="font-body antialiased">
-        <AppLayout>{children}</AppLayout>
+      <body className={`${inter.variable} font-sans antialiased`}>
+        {children}
         <Toaster />
       </body>
     </html>
