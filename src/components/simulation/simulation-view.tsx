@@ -5,14 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TimeControl } from '@/components/simulation/time-control';
 import { KPIPanel } from '@/components/simulation/kpi-panel';
 import { Section, Simulation } from '@/lib/schema';
-
-const MapComponent = dynamic(
-  () => import('@/components/simulation/map-component').then((mod) => mod.MapComponent),
-  {
-    ssr: false,
-    loading: () => <Skeleton className="w-full h-full" />,
-  }
-);
+import { MapComponent } from './map-component';
 
 export function SimulationView({ section, simulation }: { section: Section, simulation: Simulation }) {
   return (

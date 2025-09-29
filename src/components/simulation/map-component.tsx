@@ -1,8 +1,9 @@
 'use client';
 import { useRef, useEffect } from 'react';
-import { Section, Station } from '@/lib/schema';
-import { stations as allStations, tracks as allTracks, blocks as allBlocks, trains as allTrains } from '@/lib/data';
+import { Section } from '@/lib/schema';
+import { useSimulation } from '@/hooks/use-simulation';
 
+const trackColor = '#e2e8f0'; // slate-200
 const trainColors: { [key: string]: string } = {
   express: '#f97316', // orange-500
   passenger: '#3b82f6', // blue-500
@@ -10,17 +11,98 @@ const trainColors: { [key: string]: string } = {
   emergency: '#ef4444', // red-500
 };
 
-const blockColors = {
-  occupied: '#ef4444',
-  free: '#22c55e'
+// Manually defined track paths based on the image
+const trackPaths = {
+    // Incoming curved track from top
+    path1: (ctx: CanvasRenderingContext2D) => {
+        ctx.beginPath();
+        ctx.moveTo(100, 150);
+        ctx.bezierCurveTo(250, 50, 450, 50, 600, 200);
+        ctx.stroke();
+    },
+    // Incoming straight track
+    path2: (ctx: CanvasRenderingContext2D) => {
+        ctx.beginPath();
+        ctx.moveTo(100, 250);
+        ctx.lineTo(600, 200);
+        ctx.stroke();
+    },
+    // Incoming lower curve 1
+    path3: (ctx: CanvasRenderingContext2D) => {
+        ctx.beginPath();
+        ctx.moveTo(100, 350);
+        ctx.bezierCurveTo(250, 450, 450, 450, 600, 300);
+        ctx.stroke();
+    },
+     // Incoming lower curve 2
+    path4: (ctx: CanvasRenderingContext2D) => {
+        ctx.beginPath();
+        ctx.moveTo(100, 450);
+        ctx.bezierCurveTo(250, 550, 450, 550, 600, 400);
+        ctx.stroke();
+    },
+    // Outgoing straight tracks
+    outPath1: (ctx: CanvasRenderingContext2D) => {
+        ctx.beginPath();
+        ctx.moveTo(600, 200);
+        ctx.lineTo(900, 200);
+        ctx.stroke();
+    },
+    outPath2: (ctx: CanvasRenderingContext2D) => {
+        ctx.beginPath();
+        ctx.moveTo(600, 300);
+        ctx.lineTo(900, 300);
+        ctx.stroke();
+    },
+    outPath3: (ctx: CanvasRenderingContext2D) => {
+        ctx.beginPath();
+        ctx.moveTo(600, 400);
+        ctx.lineTo(900, 400);
+        ctx.stroke();
+    },
+};
+
+const getPointOnPath = (pathName: string, t: number) => {
+    // Simple interpolation for demonstration. A real implementation would solve the bezier equation.
+    switch(pathName) {
+        case 'path1': 
+            const t1 = 1 - t;
+            const t1_2 = t1 * t1;
+            const t1_3 = t1_2 * t1;
+            const x1 = t1_3 * 100 + 3 * t1_2 * t * 250 + 3 * t1 * t * t * 450 + t * t * t * 600;
+            const y1 = t1_3 * 150 + 3 * t1_2 * t * 50 + 3 * t1 * t * t * 50 + t * t * t * 200;
+            return {x: x1, y: y1};
+        case 'path2':
+            return { x: 100 + (600 - 100) * t, y: 250 + (200 - 250) * t };
+        case 'path3':
+            const t3 = 1 - t;
+            const t3_2 = t3 * t3;
+            const t3_3 = t3_2 * t3;
+            const x3 = t3_3 * 100 + 3 * t3_2 * t * 250 + 3 * t3 * t * t * 450 + t * t * t * 600;
+            const y3 = t3_3 * 350 + 3 * t3_2 * t * 450 + 3 * t3 * t * t * 450 + t * t * t * 300;
+            return {x: x3, y: y3};
+        case 'path4':
+            const t4 = 1 - t;
+            const t4_2 = t4 * t4;
+            const t4_3 = t4_2 * t4;
+            const x4 = t4_3 * 100 + 3 * t4_2 * t * 250 + 3 * t4 * t * t * 450 + t * t * t * 600;
+            const y4 = t4_3 * 450 + 3 * t4_2 * t * 550 + 3 * t4 * t * t * 550 + t * t * t * 400;
+            return {x: x4, y: y4};
+        case 'outPath1':
+             return { x: 600 + (900 - 600) * t, y: 200 };
+        case 'outPath2':
+             return { x: 600 + (900 - 600) * t, y: 300 };
+        case 'outPath3':
+             return { x: 600 + (900 - 600) * t, y: 400 };
+        default:
+            return {x: 0, y: 0}
+    }
 }
+
 
 export function MapComponent({ section }: { section: Section }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const sectionStations: Station[] = section.stationList
-    .map((id) => allStations[id])
-    .filter(Boolean);
+  const { trains } = useSimulation();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -33,94 +115,62 @@ export function MapComponent({ section }: { section: Section }) {
     if(!parent) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = parent.clientWidth * dpr;
-    canvas.height = parent.clientHeight * dpr;
+    const rect = parent.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
     ctx.scale(dpr, dpr);
-    const { width, height } = parent;
+    
+    const { width, height } = rect;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
+    // Animation loop
+    let animationFrameId: number;
+    const render = () => {
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
 
-    // --- Layout Stations ---
-    const stationPositions: Map<string, { x: number; y: number }> = new Map();
-    const padding = 60;
-    const stationCount = sectionStations.length;
-    sectionStations.forEach((station, index) => {
-      const x = padding + (index / (stationCount - 1)) * (width - padding * 2);
-      const y = height / 2;
-      stationPositions.set(station.id, { x, y });
-    });
+        // --- Draw Tracks ---
+        ctx.strokeStyle = trackColor;
+        ctx.lineWidth = 2;
+        Object.values(trackPaths).forEach(drawPath => drawPath(ctx));
 
-    // --- Draw Tracks and Blocks ---
-    Object.values(allTracks).forEach(track => {
-      if (section.stationList.includes(track.fromStation) && section.stationList.includes(track.toStation)) {
-        const fromPos = stationPositions.get(track.fromStation);
-        const toPos = stationPositions.get(track.toStation);
-        if (!fromPos || !toPos) return;
-
-        track.blockIds.forEach(blockId => {
-            const block = allBlocks[blockId];
-            if (!block) return;
-            
-            const startX = fromPos.x + (toPos.x - fromPos.x) * (block.start_km * 1000 / track.distance_m);
-            const endX = fromPos.x + (toPos.x - fromPos.x) * (block.end_km * 1000 / track.distance_m);
-
-            ctx.strokeStyle = block.occupiedBy ? blockColors.occupied : blockColors.free;
-            ctx.lineWidth = 4;
+        // --- Draw Arrows ---
+        ctx.fillStyle = trackColor;
+        const drawArrow = (x: number, y: number) => {
             ctx.beginPath();
-            ctx.moveTo(startX, fromPos.y);
-            ctx.lineTo(endX, fromPos.y);
-            ctx.stroke();
-        });
-      }
-    });
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - 10, y - 5);
+            ctx.lineTo(x - 10, y + 5);
+            ctx.closePath();
+            ctx.fill();
+        }
+        drawArrow(895, 200);
+        drawArrow(895, 300);
+        drawArrow(895, 400);
 
-    // --- Draw Stations ---
-    stationPositions.forEach((pos, stationId) => {
-      const station = allStations[stationId];
-      ctx.fillStyle = '#94a3b8'; // slate-400
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 8, 0, 2 * Math.PI);
-      ctx.fill();
 
-      ctx.fillStyle = '#e2e8f0'; // slate-200
-      ctx.font = '12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(station.id, pos.x, pos.y + 25);
-    });
-
-    // --- Draw Trains ---
-     Object.values(allTrains).forEach(train => {
-        if (train.position.type === 'block' && train.position.offset_km) {
-            const block = allBlocks[train.position.id];
-            if (!block) return;
-
-            const track = allTracks[block.trackId];
-            if (!track || !section.stationList.includes(track.fromStation)) return;
-
-            const fromPos = stationPositions.get(track.fromStation);
-            const toPos = stationPositions.get(track.toStation);
-
-            if(!fromPos || !toPos) return;
-            
-            const percentage = ((block.start_km + train.position.offset_km) * 1000) / track.distance_m;
-            const x = fromPos.x + (toPos.x - fromPos.x) * percentage;
-            const y = fromPos.y - 15; // Offset trains above track
-
+        // --- Draw Trains ---
+        trains.forEach(train => {
+            const point = getPointOnPath(train.path, train.progress);
             ctx.fillStyle = trainColors[train.type] || '#fff';
             ctx.beginPath();
-            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.arc(point.x, point.y, 8, 0, 2 * Math.PI);
             ctx.fill();
-            
+
             ctx.fillStyle = '#fff';
             ctx.font = '10px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(train.trainNo, x, y - 10);
-        }
-     });
+            ctx.fillText(train.id, point.x, point.y - 12);
+        });
 
+        animationFrameId = window.requestAnimationFrame(render);
+    }
+    render();
+    
+    return () => {
+        window.cancelAnimationFrame(animationFrameId);
+    };
 
-  }, [section, sectionStations]);
+  }, [trains]);
 
   return <canvas ref={canvasRef} className="w-full h-full" />;
 }
