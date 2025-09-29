@@ -1,3 +1,4 @@
+
 'use client';
 import { useRef, useEffect, useState } from 'react';
 import type { Section } from '@/lib/schema';
@@ -114,7 +115,7 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
             canvas.removeEventListener('wheel', handleWheel);
             canvas.removeEventListener('mousedown', handleMouseDown);
             canvas.removeEventListener('mouseup', handleMouseUp);
-            canvas.removeEventListener('mouseleave', handleLeave);
+            canvas.removeEventListener('mouseleave', handleMouseLeave);
             canvas.removeEventListener('mousemove', handleMouseMove);
         }
     };
@@ -245,3 +246,5 @@ export function MapComponent({ section, caseId }: { section: Section, caseId: st
 
   return <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing bg-gray-900 rounded-lg" />;
 }
+
+    
