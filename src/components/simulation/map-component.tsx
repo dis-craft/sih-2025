@@ -31,10 +31,10 @@ const layout = {
         'entry1': { x: 200, y: 150 },
         'entry2': { x: 200, y: 450 },
         // Station Platforms Start
-        'p1-start': { x: 350, y: 150 },
-        'p2-start': { x: 350, y: 250 },
-        'p3-start': { x: 350, y: 350 },
-        'p4-start': { x: 350, y: 450 },
+        'p1-start': { x: 350, y: 150, label: 'P1' },
+        'p2-start': { x: 350, y: 250, label: 'P2' },
+        'p3-start': { x: 350, y: 350, label: 'P3' },
+        'p4-start': { x: 350, y: 450, label: 'P4' },
         // Station Platforms End
         'p1-end': { x: 850, y: 150 },
         'p2-end': { x: 850, y: 250 },
@@ -182,11 +182,20 @@ export function MapComponent({ section }: { section: Section }) {
         ctx.fillStyle = stationColor;
         ctx.strokeStyle = '#9ca3af'; // gray-400
         ctx.lineWidth = 2 / view.zoom;
-        Object.values(layout.points).forEach(p => {
+        Object.entries(layout.points).forEach(([key, p]) => {
             ctx.beginPath();
             ctx.arc(p.x, p.y, 8 / view.zoom, 0, 2 * Math.PI);
             ctx.fill();
             ctx.stroke();
+            
+            // Draw Label for platforms
+            if (p.label) {
+                ctx.fillStyle = '#000';
+                ctx.font = `bold ${10 / view.zoom}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(p.label, p.x, p.y);
+            }
         });
 
         // --- Draw Trains ---

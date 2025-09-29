@@ -66,9 +66,9 @@ export function TimeControl({
             </div>
             <Slider
                 id="speed-control"
-                min={1}
+                min={0.2}
                 max={10}
-                step={1}
+                step={0.1}
                 defaultValue={[simSpeed]}
                 onValueChange={(value) => onSpeedChange(value[0])}
             />

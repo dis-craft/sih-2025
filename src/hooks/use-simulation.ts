@@ -82,8 +82,8 @@ export const useSimulation = () => {
                     }
                 }
                 
-                const stoppingDistance = 0.1; // Stop if train is within 10% of track length
-                const slowingDistance = 0.3;  // Start slowing down if train is within 30% of track length
+                const stoppingDistance = 0.2; // Stop if train is within 20% of track length (Increased)
+                const slowingDistance = 0.4;  // Start slowing down if train is within 40% of track length (Increased)
 
                 if (leadTrainDistance < stoppingDistance) {
                     newSpeed = 0;
