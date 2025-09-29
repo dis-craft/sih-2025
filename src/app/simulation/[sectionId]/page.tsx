@@ -55,7 +55,9 @@ export default function SimulationPage({ params, searchParams }: {
                                     <TabsTrigger value="audit">Audit Trail</TabsTrigger>
                                   </TabsList>
                                   <TabsContent value="requests" className="flex-1 min-h-0">
-                                    <RequestQueue sectionId={section.id}/>
+                                    <Card className='h-full flex flex-col'>
+                                      <RequestQueue sectionId={section.id}/>
+                                    </Card>
                                   </TabsContent>
                                   <TabsContent value="audit" className="flex-1 min-h-0">
                                     <EventLog events={events} />

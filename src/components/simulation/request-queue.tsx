@@ -54,7 +54,7 @@ export function RequestQueue({ sectionId }: { sectionId: string }) {
     const pendingRequests = requests.filter(r => r.status === 'pending').sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
 
     return (
-        <Card className='h-full flex flex-col'>
+        <>
             <CardHeader className='pb-2'>
                 <CardTitle className='text-md'>Incoming Queue</CardTitle>
                 <CardDescription className='text-xs'>
@@ -132,6 +132,6 @@ export function RequestQueue({ sectionId }: { sectionId: string }) {
                     )}
                 </ScrollArea>
             </CardContent>
-        </Card>
+        </>
     );
 }
