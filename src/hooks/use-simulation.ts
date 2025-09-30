@@ -43,7 +43,7 @@ export type SimulationMetrics = {
 }
 
 // Simulation constants
-const TIME_STEP_S = 10; // Each tick is 10 seconds of simulation time
+const TIME_STEP_S = 1; // Each tick is 1 second of simulation time
 const SECTION_LENGTH_MI = 20;
 const SIDING_HALT_DURATION_MIN = 5;
 const HEADWAY_MIN = 5;
