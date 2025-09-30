@@ -182,6 +182,8 @@ export const useSimulation = (caseId: string) => {
                                  train.track = nextTrackId;
                                  const fromPointNextTrack = simCase.layout.points[nextTrackLayout.points[0]];
                                  train.position = fromPointNextTrack.mile;
+                             } else {
+                                console.warn(`Train ${train.id} has an invalid next track ID: ${nextTrackId}`)
                              }
                         }
                     }

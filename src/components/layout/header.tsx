@@ -22,10 +22,13 @@ export function Header({ sectionName }: { sectionName: string }) {
   const { isMobile } = useSidebar();
   
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-card px-4 md:px-6">
       <div className="flex items-center gap-2">
         {isMobile && <SidebarTrigger />}
-         <h1 className="text-lg font-semibold md:text-xl">RailOptix</h1>
+         <div className='hidden md:flex items-center gap-2'>
+            <Train className="h-6 w-6 text-primary" />
+            <h1 className="text-lg font-semibold md:text-xl">RailOptix</h1>
+         </div>
       </div>
       
       <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">

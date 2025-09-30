@@ -4,14 +4,15 @@ import { notFound } from "next/navigation";
 import { RequestQueue } from "@/components/simulation/request-queue";
 import { EventLog } from "@/components/simulation/event-log";
 import { SimulationView } from "@/components/simulation/simulation-view";
-import { SidebarProvider, Sidebar, SidebarInset, SidebarContent, SidebarHeader, SidebarFooter } from "@/components/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarInset, SidebarContent, SidebarHeader, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarSeparator } from "@/components/ui/sidebar";
 import { CaseSelector } from "@/components/simulation/case-selector";
 import { Button } from "@/components/ui/button";
-import { Bot, Settings, LogOut } from "lucide-react";
+import { Bot, Settings, LogOut, Train } from "lucide-react";
 import { AICopilot } from "@/components/simulation/ai-copilot";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { KPIPanel } from "@/components/simulation/kpi-panel";
+import { ControlPanel } from "@/components/simulation/control-panel";
 
 export default function SimulationPage({ params, searchParams }: { 
     params: { sectionId: string },
@@ -33,10 +34,12 @@ export default function SimulationPage({ params, searchParams }: {
                 <div className="flex flex-1 overflow-hidden">
                     <Sidebar>
                         <SidebarHeader className="p-4">
-                            <h2 className="text-xl font-semibold">Simulations</h2>
+                            <h2 className="text-xl font-semibold flex items-center gap-2"><Train /> RailOptix</h2>
                         </SidebarHeader>
-                        <SidebarContent className="p-2">
+                        <SidebarContent className="p-2 space-y-4">
                            <CaseSelector sectionId={section.id} />
+                           <SidebarSeparator />
+                           <ControlPanel sectionId={section.id} />
                         </SidebarContent>
                         <SidebarFooter className="p-2">
                              <Button variant="ghost">
