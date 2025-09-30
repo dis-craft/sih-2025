@@ -139,7 +139,7 @@ export const useSimulation = (caseId: string) => {
                         continue; // Wait for approval
                     }
 
-                    if (train.status === 'finished' || train.status === 'awaiting_approval') continue;
+                    if (train.status === 'finished' || train.approvalState !== 'approved' || train.status === 'awaiting_approval') continue;
 
                     // Handle breakdowns
                     if (train.breakdownDuration > 0 && newSimTime >= (train.startTime + 5) && train.status !== 'breakdown') { // simplified trigger
@@ -392,10 +392,16 @@ export const useSimulation = (caseId: string) => {
             const trainIndex = newTrains.findIndex(t => t.id === trainId);
             if (trainIndex !== -1) {
                 const train = newTrains[trainIndex];
-                if (train.approvalState === 'pending') {
+                if (train.approvalState === 'pending' && train.decisionPointId === 'start_approval') {
                     if (approved) {
                         train.approvalState = 'approved';
-                        // The main simulation loop will now pick it up and start it
+                        const initialTrackLayout = simCase.layout.tracks[train.track];
+                        if (initialTrackLayout) {
+                            const entryPoint = simCase.layout.points[initialTrackLayout.points[0]];
+                            train.position = entryPoint.mile;
+                            train.status = 'on-time';
+                            train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
+                        }
                     } else {
                         train.approvalState = 'rejected';
                         train.status = 'stopped';
@@ -468,5 +474,3 @@ export const useSimulation = (caseId: string) => {
 
     return { trains, isRunning, setIsRunning, reset, step, simulationSpeed, setSimulationSpeed: handleSpeedChange, simulationTime, metrics, approvalRequest, handleRequestDecision };
 };
-
-    
