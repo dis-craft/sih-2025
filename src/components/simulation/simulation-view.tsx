@@ -8,7 +8,6 @@ import { useSimulation } from '@/hooks/use-simulation';
 import { simulationCases } from '@/lib/simulation-cases';
 import { notFound } from 'next/navigation';
 import { Card } from '../ui/card';
-import { InteractiveJunctionDialog } from './interactive-junction-dialog';
 
 export function SimulationView({ section, caseId }: { section: Section, caseId: string }) {
   const sim = useSimulation(caseId);
@@ -34,13 +33,6 @@ export function SimulationView({ section, caseId }: { section: Section, caseId: 
         <MapComponent section={section} caseId={caseId} />
       </div>
     </div>
-    {sim.approvalRequest && (
-        <InteractiveJunctionDialog
-          isOpen={!!sim.approvalRequest}
-          request={sim.approvalRequest}
-          onDecision={sim.handleRequestDecision}
-        />
-      )}
     </>
   );
 }
