@@ -8,7 +8,7 @@ export type Train = {
     track: string;
     position: number; // current mile
     speed: number;    // current speed in mph
-    status: 'on-time' | 'delayed' | 'stopped' | 'slowing' | 'in-siding' | 'at-platform' | 'finished' | 'breakdown';
+    status: 'on-time' | 'delayed' | 'stopped' | 'slowing' | 'in-siding' | 'at-platform' | 'finished' | 'breakdown' | 'pending_approval';
     
     // Static properties from case definition
     baseSpeed: number;
@@ -27,6 +27,7 @@ export type Train = {
     scheduledArrivalTime: number;
     conflictTime: number; // time spent resolving conflicts
     breakdownDuration: number; // minutes
+    needsPath?: boolean; // For interactive cases
 };
 
 export type SimulationMetrics = {
@@ -41,6 +42,12 @@ export type SimulationMetrics = {
     safetyComplianceRate: number;
     priorityAdherence: number;
 }
+
+export type ApprovalRequest = {
+    trainId: string;
+    decisionPointId: string;
+    possiblePaths: string[][];
+};
 
 // Simulation constants
 const TIME_STEP_S = 10; // Each tick is 10 seconds of simulation time
@@ -80,6 +87,7 @@ export const useSimulation = (caseId: string) => {
     const [isRunning, setIsRunning] = useState(true);
     const [simulationSpeed, setSimulationSpeed] = useState(1);
     const [simulationTime, setSimulationTime] = useState(0); // in minutes
+    const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
     
     const initialMetrics: SimulationMetrics = { 
         throughput: 0, avgDelay: 0, efficiency: 0, totalDelay: 0, punctualityRate: 100, 
@@ -103,6 +111,7 @@ export const useSimulation = (caseId: string) => {
         setSimulationTime(0);
         setIsRunning(true);
         setMetrics(initialMetrics);
+        setApprovalRequest(null);
         priorityConflictsResolved.current = 0;
         totalPriorityDecisions.current = 0;
     }, [caseId, initializeTrains]);
@@ -119,7 +128,7 @@ export const useSimulation = (caseId: string) => {
                 for (let i = 0; i < newTrains.length; i++) {
                     const train = newTrains[i];
 
-                    if (train.status === 'finished') continue;
+                    if (train.status === 'finished' || train.status === 'pending_approval') continue;
 
                     // Handle breakdowns
                     if (train.breakdownDuration > 0 && newSimTime >= (train.startTime + 5) && train.status !== 'breakdown') { // simplified trigger
@@ -139,7 +148,12 @@ export const useSimulation = (caseId: string) => {
                     const actualStartTime = train.startTime + (simCase.initialTrains.find(t=>t.id === train.id)?.delay || 0);
 
                     if (train.position < 0 && newSimTime >= actualStartTime) {
-                        const entryPoint = simCase.layout.points[simCase.layout.tracks[train.track].points[0]];
+                        const initialTrackLayout = simCase.layout.tracks[train.track];
+                        if (!initialTrackLayout) {
+                            console.warn(`Train ${train.id} has an invalid initial track ID: ${train.track}. Skipping.`);
+                            continue;
+                        }
+                        const entryPoint = simCase.layout.points[initialTrackLayout.points[0]];
                         train.position = entryPoint.mile;
                         train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
                         train.status = 'on-time';
@@ -156,12 +170,31 @@ export const useSimulation = (caseId: string) => {
                             train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
                             train.status = 'on-time';
                             train.haltTimer = 0;
+                            // If halt was for approval, trigger it now
+                             const currentPoint = Object.values(simCase.layout.points).find(p => p.isDecisionPoint && Math.abs(train.position - p.mile) < 0.1);
+                             if (currentPoint) {
+                                train.status = 'pending_approval';
+                                setApprovalRequest({ trainId: train.id, decisionPointId: 'DP1', possiblePaths: [['PathA']] });
+                                continue;
+                             }
                         } else {
                             train.speed = 0;
                             continue; 
                         }
                     }
                     
+                    // --- Interactive Path Request ---
+                    const nextPointId = simCase.layout.tracks[train.track].points[1];
+                    const nextPoint = simCase.layout.points[nextPointId];
+                    if (nextPoint.isDecisionPoint && Math.abs(train.position - nextPoint.mile) < 0.2) {
+                        train.status = 'pending_approval';
+                        train.speed = 0;
+                        train.position = nextPoint.mile; // Snap to point
+                        train.haltTimer = 2 / 60; // 2 sec halt
+                        continue;
+                    }
+
+
                     // --- Path switching logic ---
                     const currentTrackId = train.track;
                     const currentTrackLayout = simCase.layout.tracks[currentTrackId];
@@ -181,8 +214,8 @@ export const useSimulation = (caseId: string) => {
                         }
                     }
                     
-                    const currentPoint = Object.values(simCase.layout.points).find(p => p.isPlatform && Math.abs(train.position - p.mile) < 0.2);
-                    if (currentPoint && !train.hasHaltedAtPlatform) {
+                    const currentPlatform = Object.values(simCase.layout.points).find(p => p.isPlatform && Math.abs(train.position - p.mile) < 0.2);
+                    if (currentPlatform && !train.hasHaltedAtPlatform) {
                         train.status = 'at-platform';
                         train.haltTimer = train.platformHaltDuration;
                         train.hasHaltedAtPlatform = true;
@@ -337,12 +370,40 @@ export const useSimulation = (caseId: string) => {
         return () => clearInterval(interval);
     }, [isRunning, advanceSimulation]);
 
+    const handleRequestDecision = (trainId: string, approved: boolean, newPath?: string[]) => {
+        setTrains(prevTrains => {
+            const newTrains = [...prevTrains];
+            const trainIndex = newTrains.findIndex(t => t.id === trainId);
+            if (trainIndex !== -1) {
+                if (approved) {
+                    newTrains[trainIndex].status = 'on-time';
+                    newTrains[trainIndex].speed = newTrains[trainIndex].baseSpeed;
+                    if(newPath) {
+                        // Logic to splice the new path into the train's existing path
+                        const currentPathIndex = newTrains[trainIndex].currentPathIndex;
+                        const oldPath = newTrains[trainIndex].path;
+                        // This is a simplified splice. A real implementation would be more robust.
+                        const finalPath = [...oldPath.slice(0, currentPathIndex), ...newPath];
+                        newTrains[trainIndex].path = finalPath;
+                    }
+                } else {
+                    // Handle rejection - for now, just hold it indefinitely
+                    newTrains[trainIndex].status = 'stopped';
+                    newTrains[trainIndex].speed = 0;
+                }
+            }
+            return newTrains;
+        });
+        setApprovalRequest(null);
+    };
+
 
     const reset = useCallback(() => {
         setIsRunning(false);
         setTrains(initializeTrains());
         setSimulationTime(0);
         setMetrics(initialMetrics);
+        setApprovalRequest(null);
         priorityConflictsResolved.current = 0;
         totalPriorityDecisions.current = 0;
         setTimeout(() => setIsRunning(true), 100);
@@ -381,5 +442,5 @@ export const useSimulation = (caseId: string) => {
         setSimulationSpeed(speed);
     };
 
-    return { trains, isRunning, setIsRunning, reset, step, simulationSpeed, setSimulationSpeed: handleSpeedChange, simulationTime, metrics };
+    return { trains, isRunning, setIsRunning, reset, step, simulationSpeed, setSimulationSpeed: handleSpeedChange, simulationTime, metrics, approvalRequest, handleRequestDecision };
 };
