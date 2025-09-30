@@ -1,4 +1,5 @@
 
+
 import type { Train } from '@/hooks/use-simulation';
 
 type Point = { x: number; y: number; label?: string; isPlatform?: boolean, mile: number };
@@ -246,7 +247,7 @@ const awajiStationLayout: Layout = {
         'J_SL_S-SL_S_OUT': { points: ['J_SL_S', 'SL_S_OUT']},
 
         // Senri Line (SL) Northbound (South to North, left-to-right)
-        'SL_S_IN-J_SL_S': { points: ['SL_S_IN', 'J_SL_S']},
+        'SL_S_IN-J_SL_S_NB': { points: ['SL_S_IN', 'J_SL_S']},
         'J_SL_S-P5': { points: ['J_SL_S', 'P5'], controlPoints: ['J_P45_W']}, // Assuming SL trains can use P5
         // Path continues from P5 to north...
         'P5-J_SL_N_X': { points: ['P5', 'J_SL_N'], controlPoints: ['J_P45_E', 'C_E_2', 'C_E_1']},
@@ -370,7 +371,7 @@ export const simulationCases: Record<string, SimulationCase> = {
             // Kyoto Main Line Eastbound -> Platform 5 -> KML East Exit
             { id: 'T_KML_EB', baseSpeed: 80, platformHaltDuration: 2, startTime: 0, priority: 'high', path: ['KML_W_IN-J_W1', 'J_W1-J_P45_W', 'J_P45_W-P5', 'P5-J_P45_E', 'J_P45_E-KML_E_OUT']},
             // Senri Line Northbound -> Platform 5 -> KML East Exit (merging)
-            { id: 'T_SL_NB', baseSpeed: 70, platformHaltDuration: 2, startTime: 2, priority: 'high', path: ['SL_S_IN-J_SL_S', 'J_SL_S-P5', 'P5-J_SL_N_X', 'J_SL_N-SL_N_OUT_2']},
+            { id: 'T_SL_NB', baseSpeed: 70, platformHaltDuration: 2, startTime: 2, priority: 'high', path: ['SL_S_IN-J_SL_S_NB', 'J_SL_S-P5', 'P5-J_SL_N_X', 'J_SL_N-SL_N_OUT_2']},
             // Kyoto Main Line Westbound -> Platform 3 -> KML West Exit
             { id: 'T_KML_WB', baseSpeed: 80, platformHaltDuration: 2, startTime: 1, priority: 'high', path: ['KML_E_IN-J_P45_E', 'J_P45_E-P3_X', 'J_P23_E-P3', 'P3-J_P23_W', 'J_P23_W-J_W1', 'J_W1-KML_W_OUT']},
             // Senri Line Southbound -> Platform 2 -> Senri South Exit
