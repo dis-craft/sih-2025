@@ -1,3 +1,4 @@
+
 import type { Train } from '@/hooks/use-simulation';
 
 type Point = { x: number; y: number; label?: string; isPlatform?: boolean, mile: number };

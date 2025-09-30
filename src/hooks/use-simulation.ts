@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { simulationCases } from '@/lib/simulation-cases';
@@ -78,7 +79,7 @@ export const useSimulation = (caseId: string) => {
 
     const [trains, setTrains] = useState<Train[]>(initializeTrains);
     const [isRunning, setIsRunning] = useState(true);
-    const [simulationSpeed, setSimulationSpeed] = useState(1);
+    const [simulationSpeed, setSimulationSpeed] = useState(0.5);
     const [simulationTime, setSimulationTime] = useState(0); // in minutes
     
     const initialMetrics: SimulationMetrics = { 
