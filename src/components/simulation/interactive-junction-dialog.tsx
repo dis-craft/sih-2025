@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import type { ApprovalRequest } from '@/hooks/use-simulation';
 import { useState } from 'react';
 import { ArrowRight, Check, X } from 'lucide-react';
+import React from 'react';
 
 export function InteractiveJunctionDialog({
   isOpen,
@@ -50,14 +51,14 @@ export function InteractiveJunctionDialog({
             <h4 className="font-semibold mb-2 text-sm">AI Suggested Route:</h4>
             <div className="flex flex-wrap gap-2 items-center p-3 rounded-md bg-muted">
               {selectedPath?.map((trackId, index) => (
-                <>
-                  <Badge key={trackId} variant="secondary">
+                <React.Fragment key={`${trackId}-${index}`}>
+                  <Badge variant="secondary">
                     {trackId}
                   </Badge>
                   {index < selectedPath.length - 1 && (
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   )}
-                </>
+                </React.Fragment>
               ))}
             </div>
           </div>
@@ -83,5 +84,3 @@ export function InteractiveJunctionDialog({
     </AlertDialog>
   );
 }
-
-    
