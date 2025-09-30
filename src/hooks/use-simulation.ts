@@ -8,7 +8,7 @@ export type Train = {
     track: string;
     position: number; // current mile
     speed: number;    // current speed in mph
-    status: 'on-time' | 'delayed' | 'stopped' | 'slowing' | 'in-siding' | 'at-platform' | 'finished' | 'breakdown' | 'pending_approval';
+    status: 'on-time' | 'delayed' | 'stopped' | 'slowing' | 'in-siding' | 'at-platform' | 'finished' | 'breakdown' | 'awaiting_approval';
     
     // Static properties from case definition
     baseSpeed: number;
@@ -27,7 +27,7 @@ export type Train = {
     scheduledArrivalTime: number;
     conflictTime: number; // time spent resolving conflicts
     breakdownDuration: number; // minutes
-    needsPath?: boolean; // For interactive cases
+    approvalState: 'pending' | 'approved' | 'rejected';
 };
 
 export type SimulationMetrics = {
@@ -68,7 +68,7 @@ export const useSimulation = (caseId: string) => {
                 id: t.id,
                 position: -1, 
                 speed: 0, 
-                status: 'on-time', 
+                status: 'awaiting_approval', 
                 haltTimer: 0, 
                 hasHaltedAtPlatform: false,
                 track: t.path![0],
@@ -79,6 +79,7 @@ export const useSimulation = (caseId: string) => {
                 conflictTime: 0,
                 breakdownDuration: t.breakdownDuration || 0,
                 priority: t.priority,
+                approvalState: 'pending',
             }
         })));
     }, [simCase]);
@@ -128,7 +129,17 @@ export const useSimulation = (caseId: string) => {
                 for (let i = 0; i < newTrains.length; i++) {
                     const train = newTrains[i];
 
-                    if (train.status === 'finished' || train.status === 'pending_approval') continue;
+                    // --- Initial Approval Logic ---
+                    if (train.approvalState === 'pending' && newSimTime >= train.startTime + (2/60)) {
+                         if (!approvalRequest || approvalRequest.trainId !== train.id) {
+                            train.status = 'awaiting_approval';
+                            train.speed = 0;
+                            setApprovalRequest({ trainId: train.id, decisionPointId: 'start_approval', possiblePaths: [train.path] });
+                        }
+                        continue; // Wait for approval
+                    }
+
+                    if (train.status === 'finished' || train.status === 'awaiting_approval') continue;
 
                     // Handle breakdowns
                     if (train.breakdownDuration > 0 && newSimTime >= (train.startTime + 5) && train.status !== 'breakdown') { // simplified trigger
@@ -147,7 +158,7 @@ export const useSimulation = (caseId: string) => {
                     
                     const actualStartTime = train.startTime + (simCase.initialTrains.find(t=>t.id === train.id)?.delay || 0);
 
-                    if (train.position < 0 && newSimTime >= actualStartTime) {
+                    if (train.position < 0 && train.approvalState === 'approved') {
                         const initialTrackLayout = simCase.layout.tracks[train.track];
                         if (!initialTrackLayout) {
                             console.warn(`Train ${train.id} has an invalid initial track ID: ${train.track}. Skipping.`);
@@ -170,34 +181,35 @@ export const useSimulation = (caseId: string) => {
                             train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
                             train.status = 'on-time';
                             train.haltTimer = 0;
-                            // If halt was for approval, trigger it now
-                             const currentPoint = Object.values(simCase.layout.points).find(p => p.isDecisionPoint && Math.abs(train.position - p.mile) < 0.1);
-                             if (currentPoint) {
-                                train.status = 'pending_approval';
-                                setApprovalRequest({ trainId: train.id, decisionPointId: 'DP1', possiblePaths: [['PathA']] });
-                                continue;
-                             }
                         } else {
                             train.speed = 0;
                             continue; 
                         }
                     }
                     
-                    // --- Interactive Path Request ---
-                    const nextPointId = simCase.layout.tracks[train.track].points[1];
-                    const nextPoint = simCase.layout.points[nextPointId];
-                    if (nextPoint.isDecisionPoint && Math.abs(train.position - nextPoint.mile) < 0.2) {
-                        train.status = 'pending_approval';
-                        train.speed = 0;
-                        train.position = nextPoint.mile; // Snap to point
-                        train.haltTimer = 2 / 60; // 2 sec halt
-                        continue;
+                    const currentPoint = Object.values(simCase.layout.points).find(p => p.isDecisionPoint && Math.abs(train.position - p.mile) < 0.1);
+                    if (currentPoint && train.haltTimer <= 0) {
+                        const nextPointId = simCase.layout.tracks[train.track].points[1];
+                        const nextPoint = simCase.layout.points[nextPointId];
+                        
+                        if (nextPoint && nextPoint.isDecisionPoint) {
+                            if (!approvalRequest || approvalRequest.trainId !== train.id) {
+                                train.status = 'awaiting_approval';
+                                train.speed = 0;
+                                setApprovalRequest({ trainId: train.id, decisionPointId: nextPoint.label || 'junction', possiblePaths: [['PathA']] });
+                            }
+                            continue; // Halt and wait for approval
+                        }
                     }
 
 
                     // --- Path switching logic ---
                     const currentTrackId = train.track;
                     const currentTrackLayout = simCase.layout.tracks[currentTrackId];
+                    if (!currentTrackLayout) {
+                        console.warn(`Train ${train.id} on invalid track ${currentTrackId}. Skipping movement.`);
+                        continue;
+                    }
                     if (currentTrackLayout) {
                         const toPointId = currentTrackLayout.points[1];
                         const toPoint = simCase.layout.points[toPointId];
@@ -210,6 +222,10 @@ export const useSimulation = (caseId: string) => {
                                  train.track = nextTrackId;
                                  const fromPointNextTrack = simCase.layout.points[nextTrackLayout.points[0]];
                                  train.position = fromPointNextTrack.mile;
+                             } else {
+                                console.warn(`Train ${train.id} has invalid next track ID ${nextTrackId} in path. Halting.`);
+                                train.status = 'stopped';
+                                continue;
                              }
                         }
                     }
@@ -294,14 +310,14 @@ export const useSimulation = (caseId: string) => {
                     }
 
                     train.speed = newSpeed;
-                    if(!['at-platform', 'in-siding', 'breakdown'].includes(train.status)) {
+                    if(!['at-platform', 'in-siding', 'breakdown', 'awaiting_approval'].includes(train.status)) {
                         train.status = newStatus;
                     }
                     
                     const distanceMoved = train.speed * (timeDeltaMin / 60);
                     train.position += distanceMoved;
 
-                    const exitPoints = Object.values(simCase.layout.points).filter(p => p.label?.startsWith('E_') || p.label?.startsWith('SL_'));
+                    const exitPoints = Object.values(simCase.layout.points).filter(p => p.label?.startsWith('E_') || p.label?.startsWith('SL_') || p.label?.startsWith('S1') || p.label?.startsWith('S2'));
                     if (exitPoints.some(p => Math.abs(p.mile - train.position) < 0.5 && p.mile >= SECTION_LENGTH_MI - 0.5 )) {
                         train.status = 'finished';
                         train.speed = 0;
@@ -358,7 +374,7 @@ export const useSimulation = (caseId: string) => {
             });
             return newSimTime;
         });
-    }, [caseId, simCase]);
+    }, [caseId, simCase, approvalRequest]);
 
     useEffect(() => {
         if (!isRunning) return;
@@ -375,21 +391,29 @@ export const useSimulation = (caseId: string) => {
             const newTrains = [...prevTrains];
             const trainIndex = newTrains.findIndex(t => t.id === trainId);
             if (trainIndex !== -1) {
-                if (approved) {
-                    newTrains[trainIndex].status = 'on-time';
-                    newTrains[trainIndex].speed = newTrains[trainIndex].baseSpeed;
-                    if(newPath) {
-                        // Logic to splice the new path into the train's existing path
-                        const currentPathIndex = newTrains[trainIndex].currentPathIndex;
-                        const oldPath = newTrains[trainIndex].path;
-                        // This is a simplified splice. A real implementation would be more robust.
-                        const finalPath = [...oldPath.slice(0, currentPathIndex), ...newPath];
-                        newTrains[trainIndex].path = finalPath;
+                const train = newTrains[trainIndex];
+                if (train.approvalState === 'pending') {
+                    if (approved) {
+                        train.approvalState = 'approved';
+                        // The main simulation loop will now pick it up and start it
+                    } else {
+                        train.approvalState = 'rejected';
+                        train.status = 'stopped';
                     }
                 } else {
-                    // Handle rejection - for now, just hold it indefinitely
-                    newTrains[trainIndex].status = 'stopped';
-                    newTrains[trainIndex].speed = 0;
+                     if (approved) {
+                        train.status = 'on-time';
+                        train.speed = train.baseSpeed;
+                        if(newPath) {
+                            const currentPathIndex = train.currentPathIndex;
+                            const oldPath = train.path;
+                            const finalPath = [...oldPath.slice(0, currentPathIndex), ...newPath];
+                            train.path = finalPath;
+                        }
+                    } else {
+                        train.status = 'stopped';
+                        train.speed = 0;
+                    }
                 }
             }
             return newTrains;
@@ -444,3 +468,5 @@ export const useSimulation = (caseId: string) => {
 
     return { trains, isRunning, setIsRunning, reset, step, simulationSpeed, setSimulationSpeed: handleSpeedChange, simulationTime, metrics, approvalRequest, handleRequestDecision };
 };
+
+    

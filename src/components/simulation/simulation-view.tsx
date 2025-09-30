@@ -8,6 +8,7 @@ import { useSimulation } from '@/hooks/use-simulation';
 import { simulationCases } from '@/lib/simulation-cases';
 import { notFound } from 'next/navigation';
 import { Card } from '../ui/card';
+import { InteractiveJunctionDialog } from './interactive-junction-dialog';
 
 export function SimulationView({ section, caseId }: { section: Section, caseId: string }) {
   const sim = useSimulation(caseId);
@@ -18,6 +19,7 @@ export function SimulationView({ section, caseId }: { section: Section, caseId: 
   }
 
   return (
+    <>
     <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-4">
         <TimeControl 
           simStatus={sim.isRunning ? 'running' : 'paused'}
@@ -32,5 +34,15 @@ export function SimulationView({ section, caseId }: { section: Section, caseId: 
         <MapComponent section={section} caseId={caseId} />
       </div>
     </div>
+    {sim.approvalRequest && (
+        <InteractiveJunctionDialog
+          isOpen={!!sim.approvalRequest}
+          request={sim.approvalRequest}
+          onDecision={sim.handleRequestDecision}
+        />
+      )}
+    </>
   );
 }
+
+    
