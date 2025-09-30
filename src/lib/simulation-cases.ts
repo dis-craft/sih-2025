@@ -1,9 +1,11 @@
-import type { Train } from '@/hooks/use-simulation';
 
-type Point = { x: number; y: number; label?: string; isPlatform?: boolean, mile: number };
+import type { Train } from '@/hooks/use-simulation';
+import type { AlertDialogProps } from '@radix-ui/react-alert-dialog';
+
+type Point = { x: number; y: number; label?: string; isPlatform?: boolean, mile: number, isDecisionPoint?: boolean };
 type TrackLayout = {
     points: [string, string];
-    controlPoints?: [string, string] | [string];
+    controlPoints?: ([string, string] | [string] | {x: number, y: number, mile: number})[];
 }
 type Layout = {
     points: Record<string, Point>;
@@ -59,8 +61,8 @@ const case1Layout: Layout = {
 const case7Layout: Layout = {
     points: {
         // Entry/Exit
-        'W_EB1': { x: 50, y: 150, mile: 0 },
-        'W_EB2': { x: 50, y: 200, mile: 0 },
+        'W_EB1': { x: 50, y: 150, mile: 0, isDecisionPoint: true },
+        'W_EB2': { x: 50, y: 200, mile: 0, isDecisionPoint: true },
         'E_EB': { x: 1150, y: 175, mile: 20 },
         
         // Platforms
@@ -106,9 +108,9 @@ const complexJunctionLayout: Layout = {
       // Entry/Exit points
       'S1': { x: 1150, y: 320, label: 'S1', mile: 20 },
       'S2': { x: 1150, y: 370, label: 'S2', mile: 20 },
-      'S3': { x: 50, y: 400, label: 'S3', mile: 0 },
-      'S4': { x: 50, y: 200, label: 'S4', mile: 0 },
-      'S5': { x: 50, y: 150, label: 'S5', mile: 0 },
+      'S3': { x: 50, y: 400, label: 'S3', mile: 0, isDecisionPoint: true },
+      'S4': { x: 50, y: 200, label: 'S4', mile: 0, isDecisionPoint: true },
+      'S5': { x: 50, y: 150, label: 'S5', mile: 0, isDecisionPoint: true },
       
       // Platforms
       'P1': { x: 600, y: 100, label: 'Platform 1', isPlatform: true, mile: 10 },
@@ -258,6 +260,75 @@ const awajiStationLayout: Layout = {
     }
 }
 
+const superComplexJunctionLayout: Layout = {
+    points: {
+      // West Cell
+      'W_S1': { x: 1150, y: 320, label: 'W_S1', mile: 20 },
+      'W_S2': { x: 1150, y: 370, label: 'W_S2', mile: 20 },
+      'W_S3': { x: 50, y: 400, label: 'W_S3', mile: 0, isDecisionPoint: true },
+      'W_S4': { x: 50, y: 200, label: 'W_S4', mile: 0, isDecisionPoint: true },
+      'W_S5': { x: 50, y: 150, label: 'W_S5', mile: 0, isDecisionPoint: true },
+      'Trigger Point': { x: 600, y: 100, label: 'Trigger Point', isPlatform: true, mile: 10, isDecisionPoint: true },
+      'Trigger Point': { x: 600, y: 250, label: 'Trigger Point', isPlatform: true, mile: 10, isDecisionPoint: true },
+      'Trigger Point': { x: 600, y: 350, label: 'Trigger Point', isPlatform: true, mile: 10, isDecisionPoint: true },
+      'W_J_S5_P1_A': { x: 250, y: 150, mile: 4 }, 'W_J_S5_P1_B': { x: 450, y: 100, mile: 8 },
+      'W_J_S4_P2_A': { x: 250, y: 200, mile: 4 }, 'W_J_S4_P2_B': { x: 450, y: 250, mile: 8 },
+      'W_J_S3_P3_A': { x: 250, y: 400, mile: 4 }, 'W_J_S3_P3_B': { x: 450, y: 350, mile: 8 },
+      'W_J_S4_P3_A': { x: 300, y: 300, mile: 5 },
+      'W_J_P1_S1_A': { x: 750, y: 100, mile: 12 }, 'W_J_P1_S1_B': { x: 950, y: 320, mile: 16 },
+      'W_J_P2_S1_A': { x: 750, y: 250, mile: 12 }, 'W_J_P2_S1_B': { x: 900, y: 280, mile: 15 },
+      'W_J_P2_S2_A': { x: 750, y: 250, mile: 12 }, 'W_J_P2_S2_B': { x: 950, y: 370, mile: 16 },
+      'W_J_P3_S2_A': { x: 750, y: 350, mile: 12 }, 'W_J_P3_S2_B': { x: 900, y: 390, mile: 15 },
+
+      // East Cell (shifted by 1200px on X-axis)
+      'E_S1': { x: 2350, y: 320, label: 'E_S1', mile: 40 },
+      'E_S2': { x: 2350, y: 370, label: 'E_S2', mile: 40 },
+      'E_S3': { x: 1250, y: 400, label: 'E_S3', mile: 20, isDecisionPoint: true },
+      'E_S4': { x: 1250, y: 200, label: 'E_S4', mile: 20, isDecisionPoint: true },
+      'E_S5': { x: 1250, y: 150, label: 'E_S5', mile: 20, isDecisionPoint: true },
+      'E_P1': { x: 1800, y: 100, label: 'East Platform 1', isPlatform: true, mile: 30 },
+      'E_P2': { x: 1800, y: 250, label: 'East Platform 2', isPlatform: true, mile: 30 },
+      'E_P3': { x: 1800, y: 350, label: 'East Platform 3', isPlatform: true, mile: 30 },
+      'E_J_S5_P1_A': { x: 1450, y: 150, mile: 24 }, 'E_J_S5_P1_B': { x: 1650, y: 100, mile: 28 },
+      'E_J_S4_P2_A': { x: 1450, y: 200, mile: 24 }, 'E_J_S4_P2_B': { x: 1650, y: 250, mile: 28 },
+      'E_J_S3_P3_A': { x: 1450, y: 400, mile: 24 }, 'E_J_S3_P3_B': { x: 1650, y: 350, mile: 28 },
+      'E_J_S4_P3_A': { x: 1500, y: 300, mile: 25 },
+      'E_J_P1_S1_A': { x: 1950, y: 100, mile: 32 }, 'E_J_P1_S1_B': { x: 2150, y: 320, mile: 36 },
+      'E_J_P2_S1_A': { x: 1950, y: 250, mile: 32 }, 'E_J_P2_S1_B': { x: 2100, y: 280, mile: 35 },
+      'E_J_P2_S2_A': { x: 1950, y: 250, mile: 32 }, 'E_J_P2_S2_B': { x: 2150, y: 370, mile: 36 },
+      'E_J_P3_S2_A': { x: 1950, y: 350, mile: 32 }, 'E_J_P3_S2_B': { x: 2100, y: 390, mile: 35 },
+    },
+    tracks: {
+      // West Cell Tracks
+      'W_S5-J1': { points: ['W_S5', 'W_J_S5_P1_A']}, 'W_J1-J2_direct': { points: ['W_J_S5_P1_A', 'W_J_S5_P1_B'] }, 'W_J2-P1': { points: ['W_J_S5_P1_B', 'Trigger Point']},
+      'W_S4-J3': { points: ['W_S4', 'W_J_S4_P2_A']}, 'W_J3-P2': { points: ['W_J_S4_P2_A', 'Trigger Point']}, 'W_J3-J4': { points: ['W_J_S4_P2_A', 'W_J_S4_P3_A']}, 'W_J4-P3': { points: ['W_J_S4_P3_A', 'Trigger Point']},
+      'W_S3-J5': { points: ['W_S3', 'W_J_S3_P3_A']}, 'W_J5-P3': { points: ['W_J_S3_P3_A', 'Trigger Point']},
+      'W_P1-J6': { points: ['Trigger Point', 'W_J_P1_S1_A']}, 'W_J6-S1': { points: ['W_J_P1_S1_A', 'W_S1'], controlPoints: ['W_J_P1_S1_B'] },
+      'W_P2-J7': { points: ['Trigger Point', 'W_J_P2_S1_A']}, 'W_J7-S1': { points: ['W_J_P2_S1_A', 'W_S1'], controlPoints: ['W_J_P2_S1_B']},
+      'W_P2-J8': { points: ['Trigger Point', 'W_J_P2_S2_A']}, 'W_J8-S2': { points: ['W_J_P2_S2_A', 'W_S2'], controlPoints: ['W_J_P2_S2_B']},
+      'W_P3-J9': { points: ['Trigger Point', 'W_J_P3_S2_A']}, 'W_J9-S2': { points: ['W_J_P3_S2_A', 'W_S2'], controlPoints: ['W_J_P3_S2_B']},
+
+      // East Cell Tracks
+      'E_S5-J1': { points: ['E_S5', 'E_J_S5_P1_A']}, 'E_J1-J2_direct': { points: ['E_J_S5_P1_A', 'E_J_S5_P1_B'] }, 'E_J2-P1': { points: ['E_J_S5_P1_B', 'E_P1']},
+      'E_S4-J3': { points: ['E_S4', 'E_J_S4_P2_A']}, 'E_J3-P2': { points: ['E_J_S4_P2_A', 'E_P2']}, 'E_J3-J4': { points: ['E_J_S4_P2_A', 'E_J_S4_P3_A']}, 'E_J4-P3': { points: ['E_J_S4_P3_A', 'E_P3']},
+      'E_S3-J5': { points: ['E_S3', 'E_J_S3_P3_A']}, 'E_J5-P3': { points: ['E_J_S3_P3_A', 'E_P3']},
+      'E_P1-J6': { points: ['E_P1', 'E_J_P1_S1_A']}, 'E_J6-S1': { points: ['E_J_P1_S1_A', 'E_S1'], controlPoints: ['E_J_P1_S1_B'] },
+      'E_P2-J7': { points: ['E_P2', 'E_J_P2_S1_A']}, 'E_J7-S1': { points: ['E_J_P2_S1_A', 'E_S1'], controlPoints: ['E_J_P2_S1_B']},
+      'E_P2-J8': { points: ['E_P2', 'E_J_P2_S2_A']}, 'E_J8-S2': { points: ['E_J_P2_S2_A', 'E_S2'], controlPoints: ['E_J_P2_S2_B']},
+      'E_P3-J9': { points: ['E_P3', 'E_J_P3_S2_A']}, 'E_J9-S2': { points: ['E_J_P3_S2_A', 'E_S2'], controlPoints: ['E_J_P3_S2_B']},
+
+      // Connecting Tracks
+      'W_S1-E_S4': { points: ['W_S1', 'E_S4'] },
+      'W_S2-E_S5': { points: ['W_S2', 'E_S5'] },
+      'E_S1-W_S4': { points: ['E_S1', 'W_S4'] },
+      'E_S2-W_S5': { points: ['E_S2', 'W_S5'] },
+    },
+    config: {
+        trackColor: '#52525b',
+        stationColor: '#e5e7eb',
+        platformColor: '#2563eb',
+    }
+};
 
 const normalOpsTrains: Partial<Train>[] = [
     { id: 'T12613', path: ['T1'], baseSpeed: 100, platformHaltDuration: 2, startTime: 0, priority: 'high', cargo: null },
@@ -376,5 +447,45 @@ export const simulationCases: Record<string, SimulationCase> = {
             { id: 'T_SL_SB', baseSpeed: 70, platformHaltDuration: 2, startTime: 3, priority: 'high', path: ['SL_N_IN-J_SL_N', 'J_SL_N-P2', 'P2-J_W1_X', 'J_W1-J_SL_S', 'J_SL_S-SL_S_OUT']},
         ],
         config: {}
+    },
+    'case10': {
+        id: 'case10',
+        name: 'Interactive MILP Routing',
+        description: 'A scenario where the controller must interactively resolve a potential conflict identified by the AI.',
+        sectionId: SECTION_ID,
+        metrics: { throughput: 4, avgDelay: 1.8 },
+        layout: complexJunctionLayout,
+        initialTrains: [
+             { id: 'T12613', baseSpeed: 30, platformHaltDuration: 2, startTime: 0, priority: 'high', path: ['S4-J3', 'J3-J4', 'J4-P3', 'P3-J9', 'J9-S2']},
+             { id: 'T16216', baseSpeed: 30, platformHaltDuration: 2, startTime: 1, priority: 'high', path: ['S3-J5', 'J5-P3', 'P3-J9', 'J9-S2']},
+        ],
+        config: {}
+    },
+    'case11': {
+        id: 'case11',
+        name: 'Interactive Station Approval',
+        description: 'A train arrives at a station and requires manual approval from the controller to enter a platform.',
+        sectionId: SECTION_ID,
+        metrics: { throughput: 1, avgDelay: 0.5 },
+        layout: case7Layout,
+        initialTrains: [
+             { id: 'T12613', baseSpeed: 40, platformHaltDuration: 2, startTime: 0, priority: 'high', path: ['EB1_IN', 'J1-P1', 'P1-J2', 'EB_OUT']},
+        ],
+        config: {}
+    },
+    'case12': {
+        id: 'case12',
+        name: 'Super Complex Loop',
+        description: 'Two complex junctions stitched together to form a continuous loop, testing routing over long, complex paths.',
+        sectionId: SECTION_ID,
+        metrics: { throughput: 2, avgDelay: 10.0 },
+        layout: superComplexJunctionLayout,
+        initialTrains: [
+             { id: 'T12613', baseSpeed: 70, platformHaltDuration: 2, startTime: 0, priority: 'high', path: ['W_S5-J1', 'W_J1-J2_direct', 'W_J2-P1', 'W_P1-J6', 'W_J6-S1', 'W_S1-E_S4', 'E_S4-J3', 'E_J3-P2', 'E_P2-J8', 'E_J8-S2', 'E_S2-W_S5', 'W_S5-J1']},
+             { id: 'T16216', baseSpeed: 70, platformHaltDuration: 2, startTime: 5, priority: 'high', path: ['W_S4-J3', 'W_J3-P2', 'W_P2-J7', 'W_J7-S1', 'W_S1-E_S4', 'E_S4-J3', 'E_J3-J4', 'E_J4-P3', 'E_P3-J9', 'E_J9-S2', 'E_S2-W_S5', 'W_S5-J1']},
+        ],
+        config: {}
     }
 }
+
+    
