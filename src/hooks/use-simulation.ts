@@ -193,6 +193,14 @@ export const useSimulation = (caseId?: string) => {
                         console.warn(`Train ${train.id} has an invalid track ID: ${train.track}. Skipping.`);
                         continue;
                     }
+                     
+                    // Start train if it was just approved and is not yet on the map
+                    if (train.position < 0) {
+                        const entryPoint = simCase.layout.points[currentTrackLayout.points[0]];
+                        train.position = entryPoint.mile;
+                        train.speed = train.baseSpeed * (simCase.config.weatherFactor || 1);
+                        train.status = 'on-time';
+                    }
 
                     // Handle breakdowns
                     if (train.breakdownDuration > 0 && newSimTime >= (train.startTime + 5) && train.status !== 'breakdown') { // simplified trigger
@@ -210,8 +218,6 @@ export const useSimulation = (caseId?: string) => {
                     }
                     
                     const actualStartTime = train.startTime + (simCase.initialTrains.find(t=>t.id === train.id)?.delay || 0);
-
-                    if (train.position < 0) continue;
 
 
                     if (train.haltTimer > 0) {
@@ -489,3 +495,5 @@ export const useSimulation = (caseId?: string) => {
 };
 
 useSimulation.getState = useSimulationStore.getState;
+
+    
