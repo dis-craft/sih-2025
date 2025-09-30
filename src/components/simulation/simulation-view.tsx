@@ -18,7 +18,6 @@ export function SimulationView({ section, caseId }: { section: Section, caseId: 
   }
 
   return (
-    <>
     <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-4">
         <TimeControl 
           simStatus={sim.isRunning ? 'running' : 'paused'}
@@ -33,8 +32,5 @@ export function SimulationView({ section, caseId }: { section: Section, caseId: 
         <MapComponent section={section} caseId={caseId} />
       </div>
     </div>
-    </>
   );
 }
-
-    

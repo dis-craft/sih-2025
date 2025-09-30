@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Bot, Zap, Network, AlertTriangle, Cpu } from 'lucide-react';
-import { useSimulation } from '@/hooks/use-simulation';
-import { ApprovalPanel } from './approval-panel';
 
 const messages = [
     { type: 'info', text: 'Monitoring network traffic...', icon: <Network /> },
@@ -30,21 +28,16 @@ const getMessageStyle = (type: string) => {
 
 export function AICopilot() {
     const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
-    const { approvalRequest, handleRequestDecision, caseId } = useSimulation(useSimulation.getState().caseId);
 
     useEffect(() => {
         const interval = setInterval(() => {
             setCurrentMessageIndex(prevIndex => (prevIndex + 1) % messages.length);
-        }, 3500); 
+        }, 3500); // Change message every 3.5 seconds for a more dynamic feel
 
         return () => clearInterval(interval);
     }, []);
 
     const currentMessage = messages[currentMessageIndex];
-
-    if (approvalRequest) {
-        return <ApprovalPanel request={approvalRequest} onDecision={handleRequestDecision} />;
-    }
 
     return (
         <Card>
