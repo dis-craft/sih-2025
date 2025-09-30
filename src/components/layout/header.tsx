@@ -22,7 +22,7 @@ export function Header({ sectionName }: { sectionName: string }) {
   const { isMobile } = useSidebar();
   
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6">
       <div className="flex items-center gap-2">
         {isMobile && <SidebarTrigger />}
          <h1 className="text-lg font-semibold md:text-xl">RailOptix</h1>

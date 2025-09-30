@@ -7,7 +7,7 @@ import { SimulationView } from "@/components/simulation/simulation-view";
 import { SidebarProvider, Sidebar, SidebarInset, SidebarContent, SidebarHeader, SidebarFooter } from "@/components/ui/sidebar";
 import { CaseSelector } from "@/components/simulation/case-selector";
 import { Button } from "@/components/ui/button";
-import { Bot, Settings } from "lucide-react";
+import { Bot, Settings, LogOut } from "lucide-react";
 import { AICopilot } from "@/components/simulation/ai-copilot";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,16 +32,20 @@ export default function SimulationPage({ params, searchParams }: {
                 <Header sectionName={section.name} />
                 <div className="flex flex-1 overflow-hidden">
                     <Sidebar>
-                        <SidebarHeader>
+                        <SidebarHeader className="p-4">
                             <h2 className="text-xl font-semibold">Simulations</h2>
                         </SidebarHeader>
                         <SidebarContent className="p-2">
                            <CaseSelector sectionId={section.id} />
                         </SidebarContent>
-                        <SidebarFooter>
+                        <SidebarFooter className="p-2">
                              <Button variant="ghost">
                                 <Settings />
                                 Settings
+                            </Button>
+                            <Button variant="ghost" className="text-red-400 hover:bg-red-400/10 hover:text-red-400">
+                                <LogOut />
+                                Logout
                             </Button>
                         </SidebarFooter>
                     </Sidebar>

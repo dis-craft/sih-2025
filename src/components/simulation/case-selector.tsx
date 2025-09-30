@@ -27,7 +27,7 @@ export function CaseSelector({ sectionId }: { sectionId: string }) {
 
     return (
         <SidebarGroup>
-            <SidebarGroupLabel>Simulation Cases</SidebarGroupLabel>
+            <SidebarGroupLabel className='px-4'>Simulation Cases</SidebarGroupLabel>
             <SidebarMenu>
                 {cases.map(c => (
                     <SidebarMenuItem key={c.id}>
